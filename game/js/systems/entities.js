@@ -92,6 +92,7 @@
       Effects.doShake(6, 180);
       Effects.particles(world.player.x, world.player.y, '#b03030', 12);
     }
+    if (window.Sfx) Sfx.play('golpe');
     world.hurt(def.dano, def.nombre);
     if (def.danoCordura) world.sanity(-def.danoCordura);
     world.log(`¡${def.nombre} te ataca!`, 'danger');

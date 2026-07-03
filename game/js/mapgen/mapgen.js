@@ -308,11 +308,15 @@
     const reach = floors.filter(([x, y]) => dist[y * g.w + x] > 0);
     const far = reach.slice().sort((a, b) => dist[b[1] * g.w + b[0]] - dist[a[1] * g.w + a[0]]);
 
-    // salidas: cada una en un punto lejano distinto
+    // salidas: cada una en un punto lejano distinto; se prefieren casillas con
+    // pared al norte para que las puertas queden pegadas a la pared
     const exits = [];
     const usable = (levelDef.salidas || []).filter((s) => s.tipo !== 'void');
     const farPool = far.slice(0, Math.max(usable.length * 8, 40));
-    const spots = rng.shuffle(farPool);
+    const shuffled = rng.shuffle(farPool);
+    const spots = shuffled
+      .filter(([x, y]) => at(g, x, y - 1) === T.PARED)
+      .concat(shuffled.filter(([x, y]) => at(g, x, y - 1) !== T.PARED));
     usable.forEach((s, i) => {
       const p = spots[i % spots.length];
       if (p) exits.push({ x: p[0], y: p[1], def: s });

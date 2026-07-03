@@ -74,10 +74,10 @@
   function faceDetail(ctx, pal, bioma, rng, w) {
     // dibuja sobre una franja w×FH ya rellenada con el color base
     if (bioma === 'pasillos') {
-      // papel pintado: franjas verticales two-tone (el grabado clásico)
-      for (let x = 0; x < w; x += 10) {
-        ctx.fillStyle = shade(pal.pared, 1.13);
-        ctx.fillRect(x, 0, 5, FH);
+      // papel pintado: solo el rayado clásico fino two-tone + zócalo
+      for (let x = 0; x < w; x += 6) {
+        ctx.fillStyle = shade(pal.pared, 1.12);
+        ctx.fillRect(x, 0, 3, FH);
       }
       ctx.fillStyle = shade(pal.pared, 0.8);          // línea de remate superior
       ctx.fillRect(0, 0, w, 2);
@@ -85,23 +85,13 @@
       ctx.fillRect(0, FH - 6, w, 6);
       ctx.fillStyle = shade(pal.detalle, 0.75);
       ctx.fillRect(0, FH - 7, w, 1);
-      if (rng.chance(0.4)) {                          // mancha de humedad
-        ctx.globalAlpha = 0.3;
+      if (rng.chance(0.3)) {                          // mancha de humedad sutil
+        ctx.globalAlpha = 0.22;
         ctx.fillStyle = shade(pal.pared, 0.7);
         ctx.beginPath();
-        ctx.ellipse(rng.int(6, w - 6), rng.int(5, 14), rng.int(3, 6), rng.int(4, 8), 0, 0, 7);
+        ctx.ellipse(rng.int(6, w - 6), rng.int(6, 16), rng.int(3, 6), rng.int(4, 8), 0, 0, 7);
         ctx.fill();
         ctx.globalAlpha = 1;
-      }
-      if (w >= 24 && rng.chance(0.45)) {              // enchufe
-        const ex = rng.int(4, w - 10);
-        ctx.fillStyle = shade(pal.pared, 1.3);
-        ctx.fillRect(ex, FH - 16, 7, 9);
-        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-        ctx.strokeRect(ex + 0.5, FH - 15.5, 6, 8);
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(ex + 2, FH - 14, 1.5, 2.5);
-        ctx.fillRect(ex + 4.5, FH - 14, 1.5, 2.5);
       }
     } else if (bioma === 'tuneles' || bioma === 'ciudad') {
       ctx.strokeStyle = shade(pal.pared, 0.55);
@@ -172,23 +162,23 @@
     return pieces;
   }
 
-  // facePieces[(O?1)|(E?2)]: cara frontal — su anchura depende de las conexiones laterales
-  function buildFacePieces(pal, bioma, rng) {
+  // faceTexs: 3 variantes de textura de cara a lo ancho completo (48×FH).
+  // El render recorta el segmento expuesto → el rayado casa entre tiles contiguos.
+  function buildFaceTexs(pal, bioma, rng) {
     const out = [];
-    const combos = [
-      { x0: B0, w: G },            // sin vecinos laterales
-      { x0: 0, w: B1 },            // conecta al oeste
-      { x0: B0, w: TILE - B0 },    // conecta al este
-      { x0: 0, w: TILE },          // ambos
-    ];
-    for (const { x0, w } of combos) {
-      const c = canvas(w, FH), ctx = c.getContext('2d');
+    for (let v = 0; v < 3; v++) {
+      const c = canvas(TILE, FH), ctx = c.getContext('2d');
       ctx.fillStyle = shade(pal.pared, 0.95);
-      ctx.fillRect(0, 0, w, FH);
-      faceDetail(ctx, pal, bioma, rng, w);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.strokeRect(0.5, 0.5, w - 1, FH - 1);
-      out.push({ x0, canvas: c });
+      ctx.fillRect(0, 0, TILE, FH);
+      faceDetail(ctx, pal, bioma, rng, TILE);
+      // sombreado de volumen: más oscuro hacia abajo
+      const grad = ctx.createLinearGradient(0, 0, 0, FH);
+      grad.addColorStop(0, 'rgba(255,255,255,0.06)');
+      grad.addColorStop(0.6, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.22)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, TILE, FH);
+      out.push(c);
     }
     return out;
   }
@@ -276,7 +266,7 @@
         agua: aguaTile(pal, rng),
         decor: decorTile(pal, b, rng),
         topPieces: wallStyle === 'tabique' ? buildTopPieces(pal, b, rng) : null,
-        facePieces: wallStyle === 'tabique' ? buildFacePieces(pal, b, rng) : null,
+        faceTexs: wallStyle === 'tabique' ? buildFaceTexs(pal, b, rng) : null,
         arbol: wallStyle === 'arbol' ? arbolTile(pal, rng) : null,
         roca: wallStyle === 'roca' ? rocaTile(pal, rng) : null,
       };

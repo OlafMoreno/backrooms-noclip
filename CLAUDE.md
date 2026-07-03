@@ -39,9 +39,13 @@ Sin módulos ES: cada archivo de `game/js/` es un IIFE que expone un global en `
 
 ```
 data.js → engine/rng.js → mapgen/mapgen.js → engine/tiles.js → engine/sprites.js
-  → engine/effects.js → engine/fov.js → systems/entities.js → systems/rules.js
-  → engine/render.js → systems/game.js → ui/ui.js → main.js
+  → engine/effects.js → audio-manifest.js → engine/sfx.js → engine/fov.js
+  → systems/entities.js → systems/rules.js → engine/render.js → systems/game.js → ui/ui.js → main.js
 ```
+
+`audio-manifest.js` lo genera `pipeline/download-audio.js` (audios ambientales reales de la wiki
+→ `game/assets/sounds/niveles/`). `sfx.js` sintetiza el resto con WebAudio (overrides en
+`game/assets/sounds/`, tecla M silencia).
 
 (Todos existen y están committeados. v3: render cenital con paredes finas autotile en `tiles.js`/`render.js`,
 pixel-art data-driven en `sprites.js` con override PNG desde `game/assets/sprites/`, efectos de combate

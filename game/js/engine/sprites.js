@@ -5,16 +5,29 @@
   const S = 16, P = 3, OUT = 'rgba(12,10,8,0.9)';
 
   // ---------- rasterizador de matrices ----------
+  function shadeHex(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.max(0, Math.min(255, Math.round(((n >> 16) & 255) * f)));
+    const g = Math.max(0, Math.min(255, Math.round(((n >> 8) & 255) * f)));
+    const b = Math.max(0, Math.min(255, Math.round((n & 255) * f)));
+    return `rgb(${r},${g},${b})`;
+  }
+
   function rasterize(pal, rows) {
     const c = document.createElement('canvas');
     c.width = S * P; c.height = S * P;
     const ctx = c.getContext('2d');
     const grid = [];
+    let minY = S, maxY = 0;
     for (let y = 0; y < S; y++) {
       grid[y] = [];
       const row = rows[y] || '';
-      for (let x = 0; x < S; x++) grid[y][x] = pal[row[x]] || null;
+      for (let x = 0; x < S; x++) {
+        grid[y][x] = pal[row[x]] || null;
+        if (grid[y][x]) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+      }
     }
+    const hSpan = Math.max(1, maxY - minY);
     // contorno automático: celda vacía adyacente a una llena
     ctx.fillStyle = OUT;
     for (let y = 0; y < S; y++)
@@ -23,12 +36,18 @@
         const near = (grid[y - 1]?.[x]) || (grid[y + 1]?.[x]) || grid[y][x - 1] || grid[y][x + 1];
         if (near) ctx.fillRect(x * P, y * P, P, P);
       }
+    // relleno con sombreado volumétrico: luz cenital (claro arriba, oscuro abajo)
+    // y realce del borde superior-izquierdo de cada masa
     for (let y = 0; y < S; y++)
-      for (let x = 0; x < S; x++)
-        if (grid[y][x]) {
-          ctx.fillStyle = grid[y][x];
-          ctx.fillRect(x * P, y * P, P, P);
-        }
+      for (let x = 0; x < S; x++) {
+        const col = grid[y][x];
+        if (!col) continue;
+        let f = 1.08 - 0.28 * ((y - minY) / hSpan);
+        if (!grid[y - 1]?.[x] || !grid[y][x - 1]) f *= 1.1;   // borde iluminado
+        if (grid[y][x + 1] === null && x < S - 1) f *= 0.92;  // borde derecho en sombra
+        ctx.fillStyle = col[0] === '#' ? shadeHex(col, f) : col;
+        ctx.fillRect(x * P, y * P, P, P);
+      }
     return c;
   }
 
@@ -485,7 +504,22 @@
     }
   }
 
-  // ---------- props del entorno (vector con rejilla de píxel) ----------
+  // ---------- props del entorno ----------
+  // mueble con volumen: frente + techo iluminado + lateral derecho en sombra
+  function mueble(ctx, cx, baseY, w, h, color) {
+    const x = cx - w / 2, y = baseY - h;
+    ctx.fillStyle = shadeHex(color, 0.55);            // lateral derecho
+    ctx.fillRect(x + w, y + 2, 3, h - 2);
+    ctx.fillStyle = color;                            // frente
+    ctx.fillRect(x, y + 4, w, h - 4);
+    ctx.fillStyle = shadeHex(color, 1.35);            // techo
+    ctx.fillRect(x, y, w + 3, 4);
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w + 2, h - 1);
+    return { x, y: y + 4, w, h: h - 4 };              // rect del frente para detalles
+  }
+
   function drawProp(ctx, id, cx, cy, t, shade) {
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -497,23 +531,39 @@
         ctx.fillStyle = '#f0e8e0';
         ctx.fillRect(cx - 5, cy - 2, 10, 4);
         break;
-      case 'bidon':
-        ctx.fillStyle = '#4a6858';
-        ctx.fillRect(cx - 7, cy - 10, 14, 22);
+      case 'bidon': {
+        // barril cilíndrico: cuerpo con brillo lateral y tapa elíptica
         ctx.fillStyle = '#3a5446';
-        ctx.fillRect(cx - 7, cy - 4, 14, 3);
-        ctx.fillRect(cx - 7, cy + 4, 14, 3);
+        ctx.fillRect(cx - 8, cy - 9, 16, 21);
+        ctx.fillStyle = '#4a6858';
+        ctx.fillRect(cx - 8, cy - 9, 11, 21);
         ctx.fillStyle = '#5e7c6c';
-        ctx.beginPath(); ctx.ellipse(cx, cy - 10, 7, 2.5, 0, 0, 7); ctx.fill();
+        ctx.fillRect(cx - 6, cy - 9, 3, 21);
+        ctx.fillStyle = '#324a3e';
+        ctx.fillRect(cx - 8, cy - 3, 16, 2.5); ctx.fillRect(cx - 8, cy + 5, 16, 2.5);
+        ctx.fillStyle = '#6e8c7c';
+        ctx.beginPath(); ctx.ellipse(cx, cy - 9, 8, 3, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.strokeRect(cx - 8.5, cy - 9.5, 17, 22);
         break;
-      case 'camilla':
-        ctx.fillStyle = '#b8c4bc';
-        ctx.fillRect(cx - 14, cy - 6, 28, 10);
-        ctx.fillStyle = '#8a9890';
-        ctx.fillRect(cx - 14, cy - 6, 28, 3);
-        ctx.fillStyle = '#5a645e';
-        ctx.fillRect(cx - 12, cy + 4, 3, 8); ctx.fillRect(cx + 9, cy + 4, 3, 8);
+      }
+      case 'camilla': {
+        // camilla: superficie superior visible + faldón + ruedas
+        ctx.fillStyle = '#6a746e';
+        ctx.fillRect(cx - 14, cy - 2, 28, 8);        // faldón
+        ctx.fillStyle = '#c8d4cc';
+        ctx.fillRect(cx - 15, cy - 8, 30, 7);        // colchoneta (techo)
+        ctx.fillStyle = '#e0e8e2';
+        ctx.fillRect(cx - 15, cy - 8, 30, 2.5);
+        ctx.fillStyle = '#a8b4ac';
+        ctx.fillRect(cx - 15, cy - 8, 8, 7);         // almohada
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.strokeRect(cx - 15.5, cy - 8.5, 31, 8);
+        ctx.fillStyle = '#3a403c';
+        ctx.beginPath(); ctx.arc(cx - 11, cy + 8, 2.5, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 11, cy + 8, 2.5, 0, 7); ctx.fill();
         break;
+      }
       case 'silla':
         ctx.fillStyle = '#6e5a44';
         ctx.fillRect(cx - 7, cy - 12, 3, 20);
@@ -541,13 +591,15 @@
         ctx.beginPath(); ctx.arc(cx, cy - 28, 5, 0, 7); ctx.fill();
         break;
       }
-      case 'caja':
-        ctx.fillStyle = '#8a6a42';
-        ctx.fillRect(cx - 9, cy - 6, 18, 16);
-        ctx.strokeStyle = '#6e5434';
-        ctx.strokeRect(cx - 9.5, cy - 6.5, 19, 17);
-        ctx.beginPath(); ctx.moveTo(cx - 9, cy - 6); ctx.lineTo(cx + 9, cy + 10); ctx.moveTo(cx + 9, cy - 6); ctx.lineTo(cx - 9, cy + 10); ctx.stroke();
+      case 'caja': {
+        const f = mueble(ctx, cx, cy + 10, 18, 18, '#8a6a42');
+        ctx.strokeStyle = '#5e4830';
+        ctx.beginPath();
+        ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + f.w, f.y + f.h);
+        ctx.moveTo(f.x + f.w, f.y); ctx.lineTo(f.x, f.y + f.h);
+        ctx.stroke();
         break;
+      }
       case 'reloj': {
         ctx.fillStyle = '#5e4a34';
         ctx.fillRect(cx - 6, cy - 18, 12, 30);
@@ -565,38 +617,49 @@
         ctx.quadraticCurveTo(cx + 10, cy + 12, cx + 14, cy + 4);
         ctx.stroke();
         break;
-      // ----- contenedores registrables -----
-      case 'taquilla':
-        ctx.fillStyle = '#5a6a74';
-        ctx.fillRect(cx - 8, cy - 18, 16, 30);
-        ctx.strokeStyle = '#3e4a52';
-        ctx.strokeRect(cx - 8.5, cy - 18.5, 17, 31);
-        ctx.beginPath(); ctx.moveTo(cx, cy - 18); ctx.lineTo(cx, cy + 12); ctx.stroke();
-        ctx.fillStyle = '#3e4a52';
-        ctx.fillRect(cx - 6, cy - 14, 4, 1.5); ctx.fillRect(cx + 2, cy - 14, 4, 1.5);
+      // ----- contenedores registrables (muebles con volumen) -----
+      case 'taquilla': {
+        const f = mueble(ctx, cx, cy + 12, 17, 36, '#5a6a74');
+        ctx.strokeStyle = '#39434b';
+        ctx.beginPath(); ctx.moveTo(cx, f.y); ctx.lineTo(cx, f.y + f.h); ctx.stroke(); // dos puertas
+        ctx.fillStyle = '#414c54';                                    // rejillas de ventilación
+        for (const px of [cx - 6.5, cx + 2]) {
+          ctx.fillRect(px, f.y + 4, 5, 1.6);
+          ctx.fillRect(px, f.y + 7, 5, 1.6);
+          ctx.fillRect(px, f.y + 10, 5, 1.6);
+        }
+        ctx.fillStyle = '#2c343a';                                    // tiradores
+        ctx.fillRect(cx - 3.5, f.y + f.h - 14, 1.6, 5);
+        ctx.fillRect(cx + 2, f.y + f.h - 14, 1.6, 5);
         break;
-      case 'archivador':
-        ctx.fillStyle = '#7a7264';
-        ctx.fillRect(cx - 8, cy - 14, 16, 26);
-        ctx.strokeStyle = '#5a5448';
-        for (let i = 0; i < 3; i++) ctx.strokeRect(cx - 6.5, cy - 11.5 + i * 8, 13, 6);
+      }
+      case 'archivador': {
+        const f = mueble(ctx, cx, cy + 12, 17, 30, '#7a7264');
+        ctx.strokeStyle = '#544e42';
+        for (let i = 0; i < 3; i++) {
+          ctx.strokeRect(f.x + 2, f.y + 2 + i * 8, f.w - 4, 6.5);     // cajones
+          ctx.fillStyle = '#4a463c';
+          ctx.fillRect(cx - 2.5, f.y + 4.5 + i * 8, 5, 1.6);          // asas
+        }
         break;
-      case 'nevera':
-        ctx.fillStyle = '#c8d0cc';
-        ctx.fillRect(cx - 8, cy - 16, 16, 28);
-        ctx.strokeStyle = '#98a29c';
-        ctx.strokeRect(cx - 8.5, cy - 16.5, 17, 29);
-        ctx.beginPath(); ctx.moveTo(cx - 8, cy - 6); ctx.lineTo(cx + 8, cy - 6); ctx.stroke();
-        ctx.fillRect(cx + 3, cy - 10, 2, 3);
+      }
+      case 'nevera': {
+        const f = mueble(ctx, cx, cy + 12, 17, 34, '#c8d0cc');
+        ctx.strokeStyle = '#8e9a94';
+        ctx.beginPath(); ctx.moveTo(f.x, f.y + 11); ctx.lineTo(f.x + f.w, f.y + 11); ctx.stroke();
+        ctx.fillStyle = '#6e7a74';                                     // tiradores
+        ctx.fillRect(f.x + f.w - 4, f.y + 3, 2, 6);
+        ctx.fillRect(f.x + f.w - 4, f.y + 14, 2, 9);
         break;
-      case 'cofre':
-        ctx.fillStyle = '#8a6a42';
-        ctx.fillRect(cx - 10, cy - 6, 20, 14);
-        ctx.fillStyle = '#6e5434';
-        ctx.fillRect(cx - 10, cy - 8, 20, 5);
-        ctx.fillStyle = '#e0b040';
-        ctx.fillRect(cx - 1.5, cy - 4, 3, 5);
+      }
+      case 'cofre': {
+        const f = mueble(ctx, cx, cy + 10, 20, 16, '#8a6a42');
+        ctx.fillStyle = '#6e5434';                                     // fleje central
+        ctx.fillRect(cx - 1.5, f.y - 4, 3, f.h + 4);
+        ctx.fillStyle = '#e0b040';                                     // cerradura
+        ctx.fillRect(cx - 2.5, f.y + 4, 5, 5);
         break;
+      }
     }
     ctx.restore();
   }

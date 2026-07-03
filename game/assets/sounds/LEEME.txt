@@ -1,0 +1,29 @@
+SONIDOS PERSONALIZADOS
+======================
+
+Todos los sonidos del juego son placeholders sintetizados por código.
+Para sustituir cualquiera, coloca aquí un archivo con su nombre exacto:
+
+  <nombre>.mp3   (también vale .ogg o .wav)
+
+Nombres de efectos disponibles:
+  paso       — pisada al moverte
+  golpe      — una entidad te ataca
+  dano       — recibes daño
+  recoger    — recoges un objeto
+  dado       — tirada de dado
+  puerta     — cruzas una salida
+  registrar  — abres una taquilla/contenedor
+  muerte     — fin de la partida
+  victoria   — escapas de las Backrooms
+  latido     — corazón con la cordura baja
+
+AMBIENTES POR NIVEL (carpeta niveles/):
+  niveles/<id-de-nivel>.mp3|wav|ogg  (ej.: niveles/level-0.mp3)
+  Los de level-306, level-385 y level-777 son los audios REALES adjuntos a sus
+  páginas de la wiki (descargados con: node pipeline/download-audio.js).
+  Puedes añadir el de cualquier otro nivel a mano con ese mismo patrón de nombre
+  y volver a ejecutar el script NO los borra. Tras añadir uno a mano, ejecuta:
+  node pipeline/download-audio.js   (regenera el manifiesto que el juego lee)
+
+Tecla M en el juego: silenciar/activar todo el sonido.

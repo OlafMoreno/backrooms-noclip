@@ -145,6 +145,7 @@
     world.player.salud = Math.max(0, world.player.salud - n);
     world.player._hitT = performance.now();
     if (window.Effects) Effects.number(world.player.x, world.player.y, '−' + n, '#e86a5a');
+    if (window.Sfx && !ambiental) Sfx.play('dano');
     world.ui.updateHUD();
     world.ui.flashDamage();
     if (world.player.salud <= 0) die(`Has muerto: ${causa} acabó contigo.`);
@@ -172,6 +173,7 @@
 
   world.rollDice = function (texto, cb) {
     world.busy = true;
+    if (window.Sfx) Sfx.play('dado');
     world.ui.showDice(texto, (d) => {
       world.busy = false;
       cb(d);
@@ -243,6 +245,7 @@
       world.ui.updateHUD();
       world.log(`— ${def.nombre} —`, 'event');
       if (via) world.log(via, 'event');
+      if (window.Sfx) Sfx.ambient(def); // arranca con el clic de ENTRAR (gesto válido)
     });
   }
 
@@ -276,6 +279,7 @@
             Effects.flash(it.x, it.y, world.data.objects[it.id].color);
             Effects.number(it.x, it.y, world.data.objects[it.id].nombre, '#a8d8a0');
           }
+          if (window.Sfx) Sfx.play('recoger');
         }
       }
     }
@@ -283,6 +287,15 @@
     // salida bajo los pies
     const ex = world.map.exits.find((e) => e.x === world.player.x && e.y === world.player.y);
     if (ex) world.ui.showExitModal(ex.def);
+
+    // aviso al pisar un contenedor sin registrar
+    const contAqui = (world.map.props || []).find(
+      (p) => p.contenedor && !p.registrado && p.x === world.player.x && p.y === world.player.y
+    );
+    if (contAqui && !contAqui.avisado) {
+      contAqui.avisado = true;
+      world.log(`Hay ${NOMBRES_CONT[contAqui.id] ?? 'un contenedor'} aquí. Pulsa E para registrarlo.`, 'good');
+    }
 
     // reglas del nivel + necesidades
     Rules.aplicarTurno(world, world.rng);
@@ -338,6 +351,7 @@
       }
       world.player.x = nx;
       world.player.y = ny;
+      if (window.Sfx) Sfx.play('paso');
     }
     worldStep();
   }
@@ -365,6 +379,7 @@
   };
   function registrar(cont) {
     cont.registrado = true;
+    if (window.Sfx) Sfx.play('registrar');
     world.rollDice(`Registras ${NOMBRES_CONT[cont.id] ?? 'el contenedor'}…`, (d) => {
       if (d >= 14) {
         const pool = ['agua_almendras', 'agua_almendras', 'botiquin', 'amuleto', 'linterna', 'chaqueta'];
@@ -466,6 +481,7 @@
     }
 
     const go = () => {
+      if (window.Sfx) Sfx.play('puerta');
       let destino = def.destino;
       if (destino === '*aleatoria') {
         const ids = Object.keys(world.data.levels).filter((i) => i !== world.level.id);
@@ -505,6 +521,7 @@
     });
     Profiles.registrarFin(false, world.journal, world.turnTotal, world.runSeed, world.level.id);
     localStorage.removeItem(saveKey());
+    if (window.Sfx) { Sfx.stopAmbient(); Sfx.play('muerte'); }
     world.ui.showEnd(false, causa);
   }
 
@@ -519,6 +536,7 @@
     Profiles.registrarSalida(world.level.id, world.turn);
     Profiles.registrarFin(true, world.journal, world.turnTotal, world.runSeed, world.level.id);
     localStorage.removeItem(saveKey());
+    if (window.Sfx) { Sfx.stopAmbient(); Sfx.play('victoria'); }
     world.ui.showEnd(true, 'Atravesaste el edificio imposible y despertaste en una acera cualquiera, bajo un sol de verdad.');
   }
 

@@ -20,7 +20,16 @@
     ArrowRight: [1, 0], KeyD: [1, 0],
   };
 
+  // el audio se desbloquea con el primer gesto (política de los navegadores)
+  document.addEventListener('keydown', () => Sfx.unlock(), { once: true });
+  document.addEventListener('click', () => Sfx.unlock(), { once: true });
+
   document.addEventListener('keydown', (ev) => {
+    if (ev.code === 'KeyM') {
+      const m = Sfx.toggleMute();
+      if (world.level && world.ui) world.ui.log(m ? 'Sonido silenciado.' : 'Sonido activado.', 'event');
+      return;
+    }
     if (!world.level || world.over) return;
     if (document.getElementById('screen-card').style.display !== 'none') return;
     if (KEYS[ev.code]) {

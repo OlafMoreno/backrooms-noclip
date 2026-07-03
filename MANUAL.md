@@ -18,7 +18,10 @@ Guía de todo lo que puedes hacer/modificar tú mismo, sin programar.
 | R | Volver al nivel anterior (cuesta cordura) |
 | J | Diario de ruta de la partida |
 | C | Códice del Errante (tu expediente permanente) |
+| M | Silenciar / activar el sonido |
 | 1-6 | Usar objeto del inventario |
+
+*(La tira de teclas también aparece siempre en la parte superior de la pantalla de juego.)*
 
 - **Objetivo**: encontrar una de las rarísimas rutas de escape (⭐). La muerte es permanente.
 - Los muebles con **brillo dorado** se pueden registrar con `E`.
@@ -59,6 +62,19 @@ genera exactamente los mismos mapas. Ideal para que tu chat juegue tu misma part
 **¿Tienes una imagen que NO cumple el formato?** (otro tamaño, sin frames, con fondo…)
 → Déjala en cualquier carpeta del proyecto y dile a Claude *«convierte esta imagen en el sprite
 de X»*. Claude la recorta, la escala a 48×48, le monta la hoja de frames y la deja lista.
+
+## 5b. Sonidos
+
+Todo el sonido del juego (pasos, golpes, dados, ambientes…) está **sintetizado por código**:
+no necesitas hacer nada para que suene. Tecla `M` para silenciar.
+
+- **Sustituir un efecto**: pon un `.mp3`/`.ogg`/`.wav` en `game/assets/sounds/` con el nombre
+  del efecto (`golpe.mp3`, `paso.mp3`…). Lista completa en el `LEEME.txt` de esa carpeta.
+- **Ambientes por nivel**: `game/assets/sounds/niveles/level-X.mp3`. Los de **Level 306, 385
+  y 777 son los audios reales adjuntos a sus páginas de la wiki** (ya descargados). Puedes
+  añadir el de cualquier otro nivel con ese patrón de nombre y ejecutar
+  `node pipeline/download-audio.js` para que el juego lo registre.
+- Si el navegador arranca en silencio: toca cualquier tecla o clic (política de autoplay).
 
 ## 6. Editar el contenido del juego (niveles, entidades, objetos)
 

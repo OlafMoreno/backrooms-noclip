@@ -173,31 +173,108 @@
     ctx.restore();
   }
 
-  function drawExit(ex, x, y, t) {
-    const cx = x + 24, cy = y + 24;
-    ctx.save();
+  // tipo visual de la salida según su texto (coherencia con la wiki)
+  function exitStyle(def) {
+    const s = (def.texto || '').toLowerCase();
+    if (/suelo|caer|agujero|fosa|hoyo|trampilla|pozo|precipicio|fall/.test(s)) return 'trampilla';
+    if (/escalera|ascensor|elevador/.test(s)) return 'escalera';
+    if (/ventana/.test(s)) return 'ventana';
+    return 'puerta';
+  }
+
+  function drawExit(ex, x, y, t, northWall) {
+    const cx = x + 24;
     const pulse = 0.6 + Math.sin(t / 400) * 0.25;
     const col = ex.def.tipo === 'escape' ? '#6ae86a' : ex.def.tipo === 'sellada' ? '#666666' : '#e8c95a';
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath(); ctx.ellipse(cx, cy + 17, 13, 4.5, 0, 0, 7); ctx.fill();
-    ctx.shadowColor = col; ctx.shadowBlur = 16 * pulse;
-    ctx.fillStyle = Tiles.shade(col, 0.35);
-    ctx.fillRect(cx - 11, cy - 19, 22, 36);
-    ctx.strokeStyle = col; ctx.lineWidth = 2;
-    ctx.strokeRect(cx - 11, cy - 19, 22, 36);
-    ctx.globalAlpha = pulse;
-    ctx.fillStyle = col;
-    ctx.fillRect(cx - 7.5, cy - 15.5, 15, 29);
+    const style = exitStyle(ex.def);
+    ctx.save();
+
+    if (style === 'trampilla') {
+      // trampilla plana en el suelo
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(x + 8, y + 10, 32, 28);
+      ctx.fillStyle = '#0a0806';
+      ctx.fillRect(x + 11, y + 13, 26, 22);
+      ctx.strokeStyle = Tiles.shade(col, 0.8); ctx.lineWidth = 2;
+      ctx.strokeRect(x + 9.5, y + 11.5, 29, 25);
+      ctx.globalAlpha = pulse * 0.6;               // resplandor desde el fondo
+      const gr = ctx.createRadialGradient(cx, y + 24, 2, cx, y + 24, 15);
+      gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gr;
+      ctx.fillRect(x + 11, y + 13, 26, 22);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = Tiles.shade(col, 0.6);     // bisagras
+      ctx.strokeRect(x + 13, y + 14.5, 5, 2); ctx.strokeRect(x + 30, y + 14.5, 5, 2);
+    } else if (style === 'escalera') {
+      // escalera descendente vista desde arriba
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x + 10, y + 8, 28, 34);
+      for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = Tiles.shade(col, 0.9 - i * 0.16);
+        ctx.fillRect(x + 12, y + 10 + i * 6, 24, 5);
+      }
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.5 + pulse * 0.4;
+      ctx.strokeRect(x + 10.5, y + 8.5, 27, 33);
+    } else if (style === 'ventana') {
+      // ventana luminosa en pie (o sobre la pared norte)
+      const by = northWall ? y - TILE + Tiles.B1 - 2 : y + 4;
+      ctx.shadowColor = col; ctx.shadowBlur = 14 * pulse;
+      ctx.fillStyle = '#2a2a2e';
+      ctx.fillRect(cx - 11, by, 22, 30);
+      ctx.fillStyle = Tiles.shade(col, 0.9);
+      ctx.globalAlpha = 0.55 + pulse * 0.35;
+      ctx.fillRect(cx - 8, by + 3, 7.5, 11); ctx.fillRect(cx + 0.5, by + 3, 7.5, 11);
+      ctx.fillRect(cx - 8, by + 16, 7.5, 11); ctx.fillRect(cx + 0.5, by + 16, 7.5, 11);
+      if (!northWall) {
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath(); ctx.ellipse(cx, y + 40, 13, 4, 0, 0, 7); ctx.fill();
+      }
+    } else {
+      // puerta: pegada a la cara de la pared norte si existe; si no, exenta
+      if (northWall) {
+        const by = y - TILE + Tiles.B1 - 1;        // arranque de la cara norte
+        const bh = Tiles.FH + 8;
+        ctx.fillStyle = Tiles.shade(col, 0.28);    // marco
+        ctx.fillRect(cx - 12, by, 24, bh);
+        ctx.fillStyle = Tiles.shade(col, 0.5);     // hoja
+        ctx.fillRect(cx - 9, by + 2, 18, bh - 3);
+        ctx.strokeStyle = Tiles.shade(col, 0.9); ctx.lineWidth = 1.5;
+        ctx.strokeRect(cx - 9.5, by + 2.5, 19, bh - 4);
+        ctx.strokeRect(cx - 6, by + 5, 11, 10);    // cuarterón
+        ctx.fillStyle = '#e8d890';                 // pomo
+        ctx.beginPath(); ctx.arc(cx + 5.5, by + bh - 12, 1.8, 0, 7); ctx.fill();
+        ctx.globalAlpha = pulse * 0.5;             // luz que se cuela por debajo
+        ctx.fillStyle = col;
+        ctx.fillRect(cx - 9, by + bh - 2, 18, 2.5);
+      } else {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath(); ctx.ellipse(cx, y + 41, 13, 4.5, 0, 0, 7); ctx.fill();
+        ctx.shadowColor = col; ctx.shadowBlur = 12 * pulse;
+        ctx.fillStyle = Tiles.shade(col, 0.3);
+        ctx.fillRect(cx - 12, y - 2, 24, 42);
+        ctx.fillStyle = Tiles.shade(col, 0.55);
+        ctx.fillRect(cx - 9, y + 1, 18, 38);
+        ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+        ctx.strokeRect(cx - 9.5, y + 1.5, 19, 37);
+        ctx.strokeRect(cx - 6, y + 5, 11, 12);
+        ctx.fillStyle = '#e8d890';
+        ctx.beginPath(); ctx.arc(cx + 5.5, y + 24, 2, 0, 7); ctx.fill();
+      }
+    }
     ctx.restore();
   }
 
   function drawItem(it, x, y, t, objects) {
     const def = objects[it.id];
-    const cx = x + 24, cy = y + 24 + Math.sin(t / 350 + cx) * 2.5;
+    // apoyado en el suelo (sin flotar): sombra de contacto + brillo pulsante
+    const cx = x + 24, cy = y + 31;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.ellipse(cx, y + 36, 8, 3, 0, 0, 7); ctx.fill();
-    ctx.shadowColor = def.color; ctx.shadowBlur = 9;
+    ctx.beginPath(); ctx.ellipse(cx, cy + 9, 9, 3.2, 0, 0, 7); ctx.fill();
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = 6 + Math.sin(t / 350 + cx) * 3;
     ctx.fillStyle = def.color;
     if (it.id === 'agua_almendras') {
       ctx.fillRect(cx - 4, cy - 8, 8, 15);
@@ -297,7 +374,8 @@
         const light = world.light[idx];
 
         const ex = exitAt.get(idx);
-        if (ex && (light > 0.05 || world.explored[idx])) drawExit(ex, sx, sy, t);
+        if (ex && (light > 0.05 || world.explored[idx]))
+          drawExit(ex, sx, sy, t, world.tiles.wallStyle === 'tabique' && esWall(x, y - 1));
         const its = itemsAt.get(idx);
         if (its && light > 0.05) for (const it of its) drawItem(it, sx, sy, t, world.data.objects);
         const prs = propsAt.get(idx);
@@ -322,15 +400,22 @@
             const bits = (esWall(x, y - 1) ? 1 : 0) | (esWall(x + 1, y) ? 2 : 0) |
                          (esWall(x, y + 1) ? 4 : 0) | (esWall(x - 1, y) ? 8 : 0);
             ctx.drawImage(world.tiles.topPieces[bits], sx, sy);
-            // cara frontal si la casilla sur es transitable y visible
-            const southIdx = (y + 1) * g.w + x;
-            if (y + 1 < g.h && !esWall(x, y + 1) && g.t[southIdx] !== T.VACIO) {
-              const key = (bits & 8 ? 1 : 0) | (bits & 2 ? 2 : 0);
-              const piece = world.tiles.facePieces[key];
-              ctx.drawImage(piece.canvas, sx + piece.x0, sy + Tiles.B1);
-              // sombra proyectada sobre el suelo
-              ctx.fillStyle = 'rgba(0,0,0,0.22)';
-              ctx.fillRect(sx + piece.x0, sy + Tiles.B1 + Tiles.FH, piece.canvas.width, 5);
+            // caras frontales: TODO segmento del borde sur del tabique que quede
+            // expuesto (también en esquinas y T — el vecino sur repinta lo suyo)
+            if (MapGen.at(g, x, y + 1) !== T.VACIO) {
+              const xStart = (bits & 8) ? 0 : Tiles.B0;
+              const xEnd = (bits & 2) ? TILE : Tiles.B1;
+              const segs = (bits & 4)
+                ? [[xStart, Tiles.B0], [Tiles.B1, xEnd]]
+                : [[xStart, xEnd]];
+              const tex = world.tiles.faceTexs[y % 3]; // misma variante por fila: rayado continuo
+              for (const [a, b] of segs) {
+                const wSeg = b - a;
+                if (wSeg <= 0) continue;
+                ctx.drawImage(tex, a, 0, wSeg, Tiles.FH, sx + a, sy + Tiles.B1, wSeg, Tiles.FH);
+                ctx.fillStyle = 'rgba(0,0,0,0.22)';
+                ctx.fillRect(sx + a, sy + Tiles.B1 + Tiles.FH, wSeg, 5);
+              }
             }
           }
         }
