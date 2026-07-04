@@ -12,7 +12,8 @@
   const WALL_H = 1.2;      // altura de los muros en unidades-tile (referencia Octopath)
   const SPRITE_H = 1.05;   // alto del billboard de actores
 
-  let renderer, scene, camera, amb, plight;
+  let renderer, scene, camera, amb, plight, spot;
+  let fogBase = 0.08;
   let glCanvas, overlay, octx, W, H;
   let levelKey = null;
   let levelGroup = null;
@@ -52,6 +53,9 @@
     plight.shadow.mapSize.set(512, 512);
     plight.shadow.bias = -0.01;
     scene.add(amb, plight);
+    // foco de la linterna (cono real; se enciende con F)
+    spot = new THREE.SpotLight(0xfff0d0, 0, 11, 0.5, 0.45, 1.2);
+    scene.add(spot, spot.target);
 
     // grano para el overlay
     grain = document.createElement('canvas');
@@ -198,6 +202,22 @@
       x.fillStyle = '#324a3e';
       x.fillRect(0, 10, w, 5); x.fillRect(0, 30, w, 5);
     }),
+    planta: () => lienzo(40, 44, (x, w, h) => {
+      // helecho: tallos con hojas (fondo transparente)
+      for (let i = 0; i < 6; i++) {
+        const bx = 6 + i * 5.5, alto = 16 + (i * 13) % 20;
+        x.strokeStyle = i % 2 ? '#3f7a48' : '#59985e';
+        x.lineWidth = 2;
+        x.beginPath();
+        x.moveTo(w / 2, h);
+        x.quadraticCurveTo(bx, h - alto / 2, bx + (i % 2 ? 3 : -3), h - alto);
+        x.stroke();
+        x.fillStyle = i % 2 ? '#4e8c55' : '#6aad70';
+        x.beginPath();
+        x.ellipse(bx + (i % 2 ? 3 : -3), h - alto, 3.5, 6, 0.4, 0, 7);
+        x.fill();
+      }
+    }),
   };
   function pintado(clave, fn) {
     if (texCache.has(clave)) return texCache.get(clave);
@@ -243,32 +263,55 @@
     const pal = world.level.paleta;
     levelGroup = new THREE.Group();
 
-    // --- atlas de suelo: [suelo0, suelo1, suelo2, agua, decor] ---
-    const atlas = document.createElement('canvas');
-    atlas.width = 48 * 5; atlas.height = 48;
-    const actx = atlas.getContext('2d');
-    const slots = [tiles.suelo[0], tiles.suelo[1], tiles.suelo[2], tiles.agua, tiles.decor];
-    slots.forEach((c, i) => actx.drawImage(c, i * 48, 0));
+    // --- SUELO CONTINUO: una sola textura seamless repetida con UV de mundo ---
+    // (adiós a los cuadrados divididos: el patrón fluye entre tiles)
+    const floorTex = tex(tiles.suelo[0], 'suelo-seam');
+    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+    const aguaTex = tex(tiles.agua, 'agua-tile');
     const floorPos = [], floorUv = [], floorIdx = [];
-    const U = 1 / 5;
+    const aguaPos = [], aguaUv = [], aguaIdx = [];
+    const plantas = [];
+    const esVerde = world.level.bioma === 'invernadero' || world.level.bioma === 'bosque';
     for (let y = 0; y < g.h; y++)
       for (let x = 0; x < g.w; x++) {
         const v = g.t[y * g.w + x];
         if (v === T.VACIO || v === T.PARED) continue;
-        const slot = v === T.AGUA ? 3 : v === T.DECOR ? 4 : (x * 7 + y * 13) % 3;
+        // UV = coordenadas de mundo → continuidad perfecta
         quad(floorPos, floorUv, floorIdx,
           [[x, 0, y + 1], [x + 1, 0, y + 1], [x + 1, 0, y], [x, 0, y]],
-          [slot * U, 0, (slot + 1) * U, 1]);
+          [x, y, x + 1, y + 1]);
+        if (v === T.AGUA)
+          quad(aguaPos, aguaUv, aguaIdx,
+            [[x, 0.02, y + 1], [x + 1, 0.02, y + 1], [x + 1, 0.02, y], [x, 0.02, y]],
+            [0, 0, 1, 1]);
+        else if (v === T.DECOR && esVerde) plantas.push([x, y]);
       }
-    const floorGeom = new THREE.BufferGeometry();
-    floorGeom.setAttribute('position', new THREE.Float32BufferAttribute(floorPos, 3));
-    floorGeom.setAttribute('uv', new THREE.Float32BufferAttribute(floorUv, 2));
-    floorGeom.setIndex(floorIdx);
-    floorGeom.computeVertexNormals();
-    const floorMesh = new THREE.Mesh(floorGeom,
-      new THREE.MeshLambertMaterial({ map: tex(atlas, 'atlas-suelo') }));
-    floorMesh.receiveShadow = true;
-    levelGroup.add(floorMesh);
+    const mkFlat = (pos, uv, idx, material) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, material);
+      m.receiveShadow = true;
+      return m;
+    };
+    levelGroup.add(mkFlat(floorPos, floorUv, floorIdx, new THREE.MeshLambertMaterial({ map: floorTex })));
+    if (aguaPos.length)
+      levelGroup.add(mkFlat(aguaPos, aguaUv, aguaIdx, new THREE.MeshLambertMaterial({ map: aguaTex })));
+    // plantas 3D (dos planos cruzados) en salas-jardín/bosques
+    if (plantas.length) {
+      const plantaTex = pintado('p-planta', PINTORES.planta);
+      const plantaMat = new THREE.MeshLambertMaterial({ map: plantaTex, transparent: true, side: THREE.DoubleSide, alphaTest: 0.3 });
+      for (const [x, y] of plantas) {
+        for (const rot of [0, Math.PI / 2]) {
+          const m = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.85), plantaMat);
+          m.position.set(x + 0.5, 0.42, y + 0.5);
+          m.rotation.y = rot + ((x * 7 + y * 3) % 5) * 0.2;
+          levelGroup.add(m);
+        }
+      }
+    }
 
     // --- muros ---
     const esWall = (x, y) => MapGen.at(g, x, y) === T.PARED;
@@ -360,6 +403,19 @@
         levelGroup.add(m);
         return;
       }
+      // sin pared al norte no hay puerta que valga: se degrada a trampilla
+      // (garantía visual: nada de puertas flotando en medio)
+      if (!paredNorte && tiles.wallStyle === 'tabique') {
+        const t2 = pintado('p-trampilla' + col, () => PINTORES.trampilla(col));
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.96, 0.96),
+          new THREE.MeshBasicMaterial({ map: t2 })
+        );
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(ex.x + 0.5, 0.025, ex.y + 0.5);
+        levelGroup.add(m);
+        return;
+      }
       // elementos de pared con su pintor y tamaño propios
       const SPEC = {
         vending: { p: 'vending', w: 0.8, h: 1.32, y: 0.66, grosor: 0.42 },
@@ -406,6 +462,16 @@
         m.castShadow = true;
         levelGroup.add(m);
         pr._mesh3d = m;
+      } else if (pr.id === 'bidon') {
+        // cilindro de verdad
+        const m = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.26, 0.26, 0.66, 10),
+          new THREE.MeshLambertMaterial({ map: pintado('p-bidon', PINTORES.bidon) })
+        );
+        m.position.set(pr.x + 0.5, 0.33, pr.y + 0.5);
+        m.castShadow = true;
+        levelGroup.add(m);
+        pr._mesh3d = m;
       } else if (CAJAS.has(pr.id) && conPintor) {
         const frente = new THREE.MeshLambertMaterial({ map: pintado('p-' + pr.id, conPintor) });
         const lado = new THREE.MeshLambertMaterial({ color: LADO_COLOR[pr.id] ?? 0x6e5434 });
@@ -418,13 +484,82 @@
         levelGroup.add(m);
         pr._mesh3d = m;
       } else {
-        const s = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: tex(Render.propToCanvas(pr.id), 'prop-' + pr.id), transparent: true,
-        }));
-        s.scale.set(1, 1.5, 1);
-        s.position.set(pr.x + 0.5, 0.62, pr.y + 0.5);
-        levelGroup.add(s);
-        pr._mesh3d = s;
+        // props menores como PRIMITIVAS 3D (nada de sprays 2D)
+        const grp = new THREE.Group();
+        const M = (geo, color) => {
+          const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
+          m.castShadow = true;
+          grp.add(m);
+          return m;
+        };
+        switch (pr.id) {
+          case 'silla': {
+            M(new THREE.BoxGeometry(0.4, 0.06, 0.4), 0x6e5a44).position.y = 0.3;   // asiento
+            M(new THREE.BoxGeometry(0.4, 0.42, 0.06), 0x6e5a44).position.set(0, 0.51, -0.17); // respaldo
+            for (const [lx, lz] of [[-0.15, -0.15], [0.15, -0.15], [-0.15, 0.15], [0.15, 0.15]])
+              M(new THREE.BoxGeometry(0.05, 0.3, 0.05), 0x55462f).position.set(lx, 0.15, lz);
+            break;
+          }
+          case 'cono': {
+            M(new THREE.ConeGeometry(0.2, 0.45, 10), 0xd86830).position.y = 0.26;
+            M(new THREE.BoxGeometry(0.34, 0.04, 0.34), 0xb85520).position.y = 0.02;
+            break;
+          }
+          case 'seta': {
+            M(new THREE.CylinderGeometry(0.06, 0.08, 0.24, 8), 0xe8e0d0).position.y = 0.12;
+            const sombrero = M(new THREE.SphereGeometry(0.2, 10, 6, 0, 7, 0, Math.PI / 2), 0xb060c8);
+            sombrero.position.y = 0.24;
+            break;
+          }
+          case 'roca_p': {
+            const r = M(new THREE.IcosahedronGeometry(0.24, 0), 0x7a7a72);
+            r.position.y = 0.16;
+            r.scale.set(1.2, 0.7, 1);
+            r.rotation.y = (pr.x * 7 + pr.y) % 6;
+            break;
+          }
+          case 'farola': {
+            M(new THREE.CylinderGeometry(0.035, 0.05, 1.5, 6), 0x2a2a30).position.y = 0.75;
+            const globo = new THREE.Mesh(
+              new THREE.SphereGeometry(0.12, 8, 6),
+              new THREE.MeshBasicMaterial({ color: 0xffb070 })  // emisivo: siempre encendida
+            );
+            globo.position.y = 1.55;
+            grp.add(globo);
+            break;
+          }
+          case 'cable': {
+            const d = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.8, 0.5),
+              new THREE.MeshLambertMaterial({ map: tex(Render.propToCanvas('cable'), 'prop-cable'), transparent: true })
+            );
+            d.rotation.x = -Math.PI / 2;
+            d.position.y = 0.02;
+            grp.add(d);
+            break;
+          }
+          case 'reloj': { // reloj de pie exento (Level 80)
+            M(new THREE.BoxGeometry(0.34, 1.3, 0.24), 0x4e3d2b).position.y = 0.65;
+            const cara = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.3, 0.44),
+              new THREE.MeshBasicMaterial({ map: pintado('p-reloj', PINTORES.reloj) })
+            );
+            cara.position.set(0, 0.95, 0.125);
+            grp.add(cara);
+            break;
+          }
+          default: {
+            const s = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: tex(Render.propToCanvas(pr.id), 'prop-' + pr.id), transparent: true,
+            }));
+            s.scale.set(0.9, 1.3, 1);
+            s.position.y = 0.55;
+            grp.add(s);
+          }
+        }
+        grp.position.set(pr.x + 0.5, 0, pr.y + 0.5);
+        levelGroup.add(grp);
+        pr._mesh3d = grp;
       }
     }
 
@@ -449,7 +584,8 @@
     // --- atmósfera del nivel ---
     const fondo = new THREE.Color(pal.fondo);
     scene.background = fondo;
-    scene.fog = new THREE.FogExp2(fondo, 0.08 + world.level.oscuridad * 0.16);
+    fogBase = 0.08 + world.level.oscuridad * 0.16;
+    scene.fog = new THREE.FogExp2(fondo, fogBase);
     amb.intensity = Math.max(0.12, 0.55 - world.level.oscuridad * 0.4);
     plight.color = new THREE.Color(pal.luz);
     plight.distance = (world.visionActual() + 3) * 1.6;
@@ -588,7 +724,21 @@
     if (Math.random() < 0.015) flicker = 0.7;
     plight.intensity = plight.intensity * 0.85 + (1.7 * flicker) * 0.15;
     plight.position.set(px, 1.6, pz);
-    if (p.luz) plight.distance = (world.visionActual() + 3) * 1.6;
+    plight.distance = (world.visionActual() + 3) * (p.luz ? 2.4 : 1.6);
+
+    // LINTERNA: cono de luz real hacia donde miras + la niebla se abre
+    const luzOn = p.luz && !world.luzBloqueada;
+    spot.intensity += ((luzOn ? 2.4 : 0) - spot.intensity) * 0.12;
+    if (spot.intensity > 0.01) {
+      let fx2 = 0, fz2 = 1;
+      if (p.dir === 'up') { fx2 = 0; fz2 = -1; }
+      else if (p.dir === 'side') { fx2 = p.flip ? -1 : 1; fz2 = 0; }
+      spot.position.set(px, 1.2, pz);
+      spot.target.position.set(px + fx2 * 3.5, 0.2, pz + fz2 * 3.5);
+      spot.target.updateMatrixWorld();
+    }
+    if (scene.fog)
+      scene.fog.density += ((luzOn ? fogBase * 0.45 : fogBase) - scene.fog.density) * 0.06;
 
     // cámara Octopath: baja, cercana, con inercia, bob sutil y rotación 90° (Q)
     if (world.moving) camBobT += 0.11;

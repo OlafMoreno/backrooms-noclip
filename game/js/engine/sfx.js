@@ -88,33 +88,30 @@
   const vp = () => 0.88 + Math.random() * 0.26;
 
   // ---------- efectos ----------
+  // v13: UNA sola capa por paso, sutil. La variación viene del pitch aleatorio
+  // y de un 20% de pasos ligeramente distintos (crujido/chapoteo integrado).
   const PASOS = {
-    moqueta: () => ruido(0.09, 520 * vp(), 0.3),
-    moqueta_humeda: () => { // la moqueta empapada de Level 0: chapoteo
-      ruido(0.07, 900 * vp(), 0.28, 'bandpass');
-      setTimeout(() => ctx && ruido(0.09, 420 * vp(), 0.18), 45);
-    },
-    hormigon: () => ruido(0.07, 1400 * vp(), 0.33, 'bandpass'),
-    baldosa: () => ruido(0.06, 2000 * vp(), 0.33, 'bandpass'),
-    baldosa_oscura: () => ruido(0.06, 2000 * vp(), 0.33, 'bandpass'),
-    piedra: () => ruido(0.07, 1600 * vp(), 0.33, 'bandpass'),
-    adoquin: () => ruido(0.07, 1500 * vp(), 0.33, 'bandpass'),
-    tablones: () => {
-      ruido(0.08, 800 * vp(), 0.32);
-      if (Math.random() < 0.25) tono(115 * vp(), 0.2, 0.16, 'triangle', 85); // crujido
-    },
-    tablones_claros: () => {
-      ruido(0.08, 800 * vp(), 0.32);
-      if (Math.random() < 0.25) tono(115 * vp(), 0.2, 0.16, 'triangle', 85);
-    },
-    moqueta_cenefa: () => ruido(0.09, 520 * vp(), 0.3),
-    rejilla: () => { ruido(0.06, 2400 * vp(), 0.26, 'bandpass'); tono(340 * vp(), 0.1, 0.18, 'triangle', 280); },
-    panel: () => ruido(0.07, 1800 * vp(), 0.3, 'bandpass'),
-    nieve: () => ruido(0.14, 340 * vp(), 0.38),
-    tierra: () => ruido(0.09, 600 * vp(), 0.3),
-    hierba: () => ruido(0.1, 500 * vp(), 0.3),
-    negro: () => ruido(0.09, 400 * vp(), 0.22),
-    blanco: () => { ruido(0.06, 2200 * vp(), 0.3, 'bandpass'); setTimeout(() => ctx && ruido(0.1, 1400, 0.09, 'bandpass'), 130); },
+    moqueta: () => ruido(0.09, 520 * vp(), 0.2),
+    moqueta_humeda: () => ruido(0.09, (Math.random() < 0.2 ? 850 : 560) * vp(), 0.2, 'bandpass'),
+    hormigon: () => ruido(0.07, 1400 * vp(), 0.22, 'bandpass'),
+    baldosa: () => ruido(0.06, 2000 * vp(), 0.22, 'bandpass'),
+    baldosa_oscura: () => ruido(0.06, 2000 * vp(), 0.22, 'bandpass'),
+    piedra: () => ruido(0.07, 1600 * vp(), 0.22, 'bandpass'),
+    adoquin: () => ruido(0.07, 1500 * vp(), 0.22, 'bandpass'),
+    tablones: () => Math.random() < 0.2
+      ? tono(110 * vp(), 0.16, 0.12, 'triangle', 85)
+      : ruido(0.08, 800 * vp(), 0.22),
+    tablones_claros: () => Math.random() < 0.2
+      ? tono(110 * vp(), 0.16, 0.12, 'triangle', 85)
+      : ruido(0.08, 800 * vp(), 0.22),
+    moqueta_cenefa: () => ruido(0.09, 520 * vp(), 0.2),
+    rejilla: () => ruido(0.06, 2400 * vp(), 0.2, 'bandpass'),
+    panel: () => ruido(0.07, 1800 * vp(), 0.2, 'bandpass'),
+    nieve: () => ruido(0.13, 340 * vp(), 0.26),
+    tierra: () => ruido(0.09, 600 * vp(), 0.2),
+    hierba: () => ruido(0.1, 500 * vp(), 0.2),
+    negro: () => ruido(0.09, 400 * vp(), 0.16),
+    blanco: () => ruido(0.06, 2200 * vp(), 0.2, 'bandpass'),
   };
 
   let pasoAlt = false;
@@ -371,9 +368,42 @@
   };
 
   function stopAmbient() {
+    ambientGen++; // invalida cargas de audio pendientes
     try { ambientStop?.(); } catch (e) {}
     ambientStop = null;
     ambientAudioEl = null;
+  }
+
+  // música generativa: acordes lentos sembrados por partida+nivel, con el ánimo
+  // acorde al peligro (mayor suave / menor / disonante)
+  function padGenerativo(nodes, levelDef) {
+    const semilla = ((window.Game?.world?.runSeed) || 'x') + '::' + levelDef.id;
+    let h = 0;
+    for (const c of semilla) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const azar = () => { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; };
+    const peligro = levelDef.peligro ?? 2;
+    const base = 110 * Math.pow(2, Math.floor(azar() * 3) / 2); // 110-220 Hz
+    const escala = peligro <= 1 ? [0, 4, 7, 9, 12]          // mayor cálida
+      : peligro >= 4 ? [0, 1, 6, 7, 13]                     // disonante
+      : [0, 3, 7, 10, 12];                                  // menor
+    const acorde = () => {
+      if (!ctx || muted) return;
+      const raiz = base * Math.pow(2, escala[Math.floor(azar() * escala.length)] / 12);
+      for (const inter of [0, escala[1 + Math.floor(azar() * 2)], 7]) {
+        const f = raiz * Math.pow(2, inter / 12);
+        const o = ctx.createOscillator();
+        o.type = 'sine'; o.frequency.value = f * (1 + (azar() - 0.5) * 0.004);
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0.0001, ctx.currentTime);
+        og.gain.exponentialRampToValueAtTime(0.055, ctx.currentTime + 2.2);
+        og.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 6.5);
+        o.connect(og).connect(ambBus);
+        o.start(); o.stop(ctx.currentTime + 7);
+      }
+    };
+    acorde();
+    const iv = setInterval(acorde, 7500 + azar() * 3000);
+    nodes.push({ stop: () => clearInterval(iv) });
   }
 
   function ambientSynth(levelDef) {
@@ -385,16 +415,19 @@
     g.connect(ambBus);
     const receta = RECETAS[levelDef.sonido] ?? RECETAS[RECETA_BIOMA[levelDef.bioma]] ?? RECETAS.hum_suave;
     receta(g, nodes);
+    padGenerativo(nodes, levelDef); // música propia de cada nivel
     ambientStop = () => {
       try { g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6); } catch (e) {}
       setTimeout(() => nodes.forEach((x) => { try { x.stop(); } catch (e) {} }), 700);
     };
   }
 
+  let ambientGen = 0; // generación: descarta callbacks tardíos (fix acumulación)
   function ambient(levelDef) {
     try {
       stopAmbient();
       if (muted) return;
+      const gen = ++ambientGen;
       // 1) archivo del nivel (del usuario o de la wiki): prueba extensiones en cadena
       const candidatos = [];
       const wikiSrc = (window.AUDIO_MANIFEST || {})[levelDef.id];
@@ -405,12 +438,14 @@
       }
       let i = 0;
       const intenta = () => {
+        if (gen !== ambientGen) return; // llegó otro ambiente: abortar
         if (i >= candidatos.length) { if (ctx) ambientSynth(levelDef); return; }
         const el = new window.Audio(candidatos[i++]);
         el.loop = true;
         el.volume = Math.min(1, 0.62 * vol * volAmb);
         el.addEventListener('error', intenta, { once: true });
         el.play().then(() => {
+          if (gen !== ambientGen) { el.pause(); el.src = ''; return; } // tardío: descartar
           ambientAudioEl = el;
           ambientStop = () => { el.pause(); el.src = ''; };
         }).catch(intenta);

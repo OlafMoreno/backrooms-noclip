@@ -20,7 +20,7 @@ cenital 2D clásica: `index.html?render=2d`.
 | Q / E | Girar la cámara 90° a izquierda/derecha (las flechas son relativas a la pantalla) |
 | — | La cámara también **gira sola**: dos pasos seguidos hacia un lado y rota para seguirte |
 | X | Esperar un turno |
-| F | Encender/apagar linterna (¡su luz atrae a las Deathmoths!) |
+| F | Linterna: cono de luz real, más alcance y la niebla se abre (¡atrae a las Deathmoths!) |
 | R | Volver al nivel anterior (cuesta cordura) |
 | J | Diario de ruta de la partida |
 | C | Códice del Errante (tu expediente permanente) |

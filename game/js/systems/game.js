@@ -320,8 +320,15 @@
     const shiftX = sx * Math.floor(W / 2);
     const shiftY = sy * Math.floor(H / 2);
     world.ventanaN = (world.ventanaN || 0) + 1;
-    const rng = RNG.create(`${world.runSeed}::${world.level.id}::ventana::${world.ventanaN}`);
-    const nuevo = MapGen.generate(world.level, rng);
+    // usa el mapa pregenerado si existe (el coste pesado ya se pagó turnos antes)
+    let nuevo;
+    if (world._preVentana && world._preVentana.n === world.ventanaN) {
+      nuevo = world._preVentana.mapa;
+    } else {
+      const rng = RNG.create(`${world.runSeed}::${world.level.id}::ventana::${world.ventanaN}`);
+      nuevo = MapGen.generate(world.level, rng);
+    }
+    world._preVentana = null;
     const ng = nuevo.grid;
     const T = MapGen.T;
     const nExp = new Uint8Array(W * H);
@@ -423,7 +430,20 @@
       let sx = 0, sy = 0;
       if (world.player.x < M) sx = -1; else if (world.player.x >= g2.w - M) sx = 1;
       if (world.player.y < M) sy = -1; else if (world.player.y >= g2.h - M) sy = 1;
-      if (sx || sy) desplazarVentana(sx, sy);
+      if (sx || sy) {
+        desplazarVentana(sx, sy);
+      } else {
+        // pregeneración: al entrar en la banda exterior, el próximo mapa se
+        // calcula YA para que el desplazamiento sea instantáneo (sin bump)
+        const M2 = M + 9;
+        const cerca = world.player.x < M2 || world.player.x >= g2.w - M2 ||
+                      world.player.y < M2 || world.player.y >= g2.h - M2;
+        const n = (world.ventanaN || 0) + 1;
+        if (cerca && (!world._preVentana || world._preVentana.n !== n)) {
+          const rngP = RNG.create(`${world.runSeed}::${world.level.id}::ventana::${n}`);
+          world._preVentana = { n, mapa: MapGen.generate(world.level, rngP) };
+        }
+      }
     }
 
     // recogida de objetos

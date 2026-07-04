@@ -26,8 +26,14 @@
 
   function speckle(ctx, rng, color, n, x0, y0, w, h, size = 1) {
     ctx.fillStyle = color;
-    for (let i = 0; i < n; i++)
-      ctx.fillRect(x0 + rng.int(0, w - 1), y0 + rng.int(0, h - 1), size, size);
+    for (let i = 0; i < n; i++) {
+      const px = x0 + rng.int(0, w - 1), py = y0 + rng.int(0, h - 1);
+      ctx.fillRect(px, py, size, size);
+      // envoltura seamless: las motas del borde reaparecen por el lado opuesto
+      // (el suelo 3D repite esta textura sin costuras)
+      if (px + size > w) ctx.fillRect(px - w, py, size, size);
+      if (py + size > h) ctx.fillRect(px, py - h, size, size);
+    }
   }
 
   // ---------- suelos (por estilo de la ficha) ----------
