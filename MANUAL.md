@@ -32,6 +32,7 @@ fluorescentes**, bloom cinematográfico y polvo en suspensión. Alternativas por
 | ESC | **Ajustes**: volumen, controles y opciones (aquí vive ahora el volumen) |
 | Clic izquierdo | **Usar la mano izquierda** (linterna, tubería, fuego griego…) |
 | Clic derecho | **Usar la mano derecha** (los objetos a 2 manos solo responden al clic izq.) |
+| G | **No-clip** (solo con su Instinto): atraviesas la pared que encaras |
 
 *(Mantener pulsada W camina a velocidad constante — sin ráfagas.)*
 
@@ -58,6 +59,38 @@ fluorescentes**, bloom cinematográfico y polvo en suspensión. Alternativas por
   botón «Tirar al suelo»: lo deja a tus pies y puedes recogerlo después.
 - **Cajas y contenedores**: taquillas, archivadores, neveras, cajas… TODOS se pueden
   registrar con ESPACIO (dado de botín). Ya no hay cajas de atrezzo que confundan.
+  ¡Ojo!: registrar HACE RUIDO, y el ruido atrae a lo que ronda cerca.
+
+## 2b. La Sintonía (el "RPG" de las Backrooms)
+
+No hay experiencia ni niveles de personaje: hay un **pacto silencioso con el lugar**.
+
+- **Sintonía (0-100)**: sube al presenciar horrores — matar entidades, chocar con ellas a
+  oscuras, beber agua contaminada, ver remodelarse los pasillos, cruzar caminos inestables,
+  vivir con la mente rota… Aparece como un **ojo amarillo** entre los iconos de estado.
+  Baja muy poco (descansar en niveles seguros, usar el Recuerdo del hogar).
+- **Instintos**: al cruzar los umbrales 20/40/60/80 eliges **1 de 3 instintos** (aleatorios
+  de un pool de 8): oír entidades a través de los muros, pasos silenciosos, esquiva
+  instintiva, necesitar menos agua/comida, registrar sin pifias, +visión, regeneración…
+  y a Sintonía 80 puede aparecer **No-clip** (tecla `G`: atraviesas la pared que encaras,
+  a cambio de cordura y con riesgo de caer al Vacío).
+- **El precio**: con Sintonía alta las entidades corrientes empiezan a IGNORARTE (te huelen
+  como cosa del lugar)… pero al cruzar una salida de ESCAPE la realidad tira un dado contra
+  tu Sintonía: si ya eres "demasiado de este lado", **te escupe de vuelta**. Escapar de
+  verdad exige seguir siendo humano. Poder o volver a casa: elige.
+
+## 2c. Combate y escape
+
+- **Telegraph**: toda entidad ANUNCIA su golpe un turno antes (⚠ y parpadeo ámbar).
+  Si te mueves ese turno, el golpe falla. El Cazador solo avisa la primera vez.
+- **Ruido**: registrar muebles, golpear (y fallar) hace ruido; las entidades que no te
+  cazan van a investigar el sonido.
+- **Arrojar** (botón en la ficha del objeto): lanzas el objeto lejos, el golpe resuena y
+  distrae — la forma clásica de quitarte algo de encima. El objeto queda en el suelo.
+- **Despistar**: si una entidad pasa 3 turnos sin detectarte, abandona la caza.
+- **Esconderse**: sobre una taquilla/nevera/archivador YA REGISTRADO, pulsa ESPACIO para
+  meterte dentro (y ESPACIO para salir). Si no te vieron entrar, pierden tu rastro; si te
+  encuentran dentro, el zarpazo duele un 50 % más.
 - **Interacciones libres**: si hay agua, PUEDES bebértela (ESPACIO)… la wiki decide si era
   buena idea. Este patrón irá creciendo: el juego te deja hacer, el lore responde.
 - El **mapa** (`M`) dibuja solo lo explorado y lo conserva; si el nivel se reorganiza

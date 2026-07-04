@@ -91,6 +91,15 @@
   function renderMoodles() {
     const cont = $('moodles');
     cont.innerHTML = '';
+    // Sintonía (v18): el ojo amarillo — siempre visible en cuanto despierta
+    const sint = world.player.sintonia || 0;
+    if (sint >= 10) {
+      const d = document.createElement('div');
+      d.className = 'moodle moodle-sint';
+      d.title = `Sintonía ${sint}/100 — las Backrooms te reclaman (dificulta el escape)`;
+      if (window.Icons) d.appendChild(Icons.img('ojo', 20));
+      cont.appendChild(d);
+    }
     for (const [icono, get, umbrales, nombres] of MOODLES) {
       const v = get(world.player);
       let lvl = 0;
@@ -253,6 +262,7 @@
     btnEq.style.display = def.manos ? 'inline-block' : 'none';
     btnEq.onclick = () => { cerrarItemInfo(); Game.equipar(slot); };
     $('btn-item-drop').onclick = () => { cerrarItemInfo(); Game.tirarItem(slot); };
+    $('btn-item-throw').onclick = () => { cerrarItemInfo(); toggleBackpack(false); Game.arrojarItem(slot); };
     $('btn-item-close').onclick = cerrarItemInfo;
     $('item-modal').style.display = 'flex';
   }
@@ -383,6 +393,36 @@
       $('btn-cross').style.display = '';
       world.busy = false;
     };
+  }
+
+  // ---------- Instintos (v18): elige 1 de 3 al cruzar un umbral de Sintonía ----------
+  function showInstintos(umbral, ofertas, cb) {
+    world.busy = true;
+    $('instinto-nivel').textContent = umbral;
+    const cont = $('instinto-cards');
+    cont.innerHTML = '';
+    for (const inst of ofertas) {
+      const card = document.createElement('div');
+      card.className = 'inst-card';
+      if (window.Icons) card.appendChild(Icons.img(inst.icono, 26));
+      const h = document.createElement('h4');
+      h.textContent = inst.nombre;
+      card.appendChild(h);
+      const p = document.createElement('p');
+      p.textContent = inst.desc;
+      card.appendChild(p);
+      card.onclick = () => {
+        $('instinto-modal').style.display = 'none';
+        if ($('exit-modal').style.display === 'none' && $('dice-overlay').style.display === 'none' &&
+            $('choice-modal').style.display === 'none' && !backpackAbierta())
+          world.busy = false;
+        if (window.Sfx) Sfx.play('recoger');
+        cb(inst.id);
+      };
+      cont.appendChild(card);
+    }
+    $('instinto-modal').style.display = 'flex';
+    if (window.Sfx) Sfx.play('ui');
   }
 
   // ---------- elección libre (beber agua, rituales…) ----------
@@ -582,7 +622,7 @@
   world.ui = {
     log, updateHUD, flashDamage, showLevelCard, showDice,
     showExitModal, showLevelPicker, showChoice, toggleJournal, showEnd, show, toggleCodex,
-    toggleBackpack, toggleLog,
+    toggleBackpack, toggleLog, showInstintos,
     get flashT() { return flashT; },
   };
 })();

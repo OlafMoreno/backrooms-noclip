@@ -928,6 +928,7 @@
     playerSprite.material.map = spriteTexFlip(sid, pframe, sflip);
     playerSprite.material.needsUpdate = true;
     playerSprite.position.set(px, SPRITE_H / 2 + 0.02, pz);
+    playerSprite.visible = !world.escondido; // dentro de un mueble no se te ve
 
     // entidades (crear bajo demanda, ocultar si no visibles)
     for (const e of world.entities) {
@@ -971,6 +972,7 @@
       }
       // tinte de estado
       s.material.color.setHex(e.paralizada > 0 ? 0x77ccff : 0xffffff);
+      if (e.preparando) s.material.color.setHex(Math.floor(t / 130) % 2 ? 0xffcc66 : 0xffffff); // ⚠ parpadea
       if (e._hitT && t - e._hitT < 170) s.material.color.setHex(0xffaaaa);
       s.position.set(e.rx + 0.5 + ox, SPRITE_H / 2 + 0.02, e.ry + 0.5 + oz);
       // respiración sutil (cada entidad con su fase: el grupo no late al unísono)

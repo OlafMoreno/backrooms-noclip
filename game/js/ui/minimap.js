@@ -29,8 +29,9 @@
 
     // (las salidas NO se muestran: hay que encontrarlas explorando)
 
-    // entidades (solo con el detector)
-    if (world.hasItem && world.hasItem('detector')) {
+    // entidades (con el detector… o con el instinto Oído de moqueta, v18)
+    if ((world.hasItem && world.hasItem('detector')) ||
+        (world.instinto && world.instinto('oido_moqueta'))) {
       const parp = Math.sin(t / 200) > 0;
       if (parp) {
         ctx.fillStyle = '#e04040';

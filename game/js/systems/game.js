@@ -160,6 +160,7 @@
   world.visionActual = function () {
     let v = world.level.vision + 2 + world.visionMod;
     if (world.player.luz) v += 4;
+    if (world.instinto('piel_fluorescente')) v += 1;
     return Math.max(2, v);
   };
 
@@ -185,6 +186,70 @@
   };
   world.thirst = (n) => { world.player.sed = Math.max(0, Math.min(100, world.player.sed + n)); };
   world.hunger = (n) => { world.player.hambre = Math.max(0, Math.min(100, world.player.hambre + n)); };
+
+  // ---------- LA SINTONÍA (v18): las Backrooms te reclaman ----------
+  // No hay XP: hay un pacto. Presenciar horrores te SINTONIZA con el lugar —
+  // ganas Instintos (poderes), pero la realidad cada vez te reconoce menos
+  // como suyo: escapar se vuelve más difícil. Poder ↔ volver a casa.
+  const INSTINTOS = {
+    oido_moqueta: { nombre: 'Oído de moqueta', icono: 'onda',
+      desc: 'Sientes a las entidades a través de los muros: aparecen en tu mapa aunque no las veas.' },
+    pies_moqueta: { nombre: 'Pies de moqueta', icono: 'punto',
+      desc: 'Tus pasos ya no suenan del todo humanos: las entidades te detectan 2 casillas más tarde.' },
+    reflejos_errante: { nombre: 'Reflejos de errante', icono: 'estrella',
+      desc: 'Un 25% de las veces esquivas por puro instinto los ataques que ves venir (⚠).' },
+    visceras_vacio: { nombre: 'Vísceras del vacío', icono: 'vacio',
+      desc: 'Tu cuerpo aprende a no necesitar: la sed y el hambre te consumen a la MITAD.' },
+    lengua_paredes: { nombre: 'Lengua de las paredes', icono: 'libro',
+      desc: 'Los contenedores te susurran lo que guardan: registrar nunca acaba mal (sin pifias).' },
+    piel_fluorescente: { nombre: 'Piel de fluorescente', icono: 'linterna',
+      desc: '+1 de visión permanente… y las Deathmoths te confunden con una luz más.' },
+    sangre_amarilla: { nombre: 'Sangre amarilla', icono: 'gota',
+      desc: 'Regeneras 1 de salud cada 12 turnos, pero el agua de almendras te repone la MITAD.' },
+    noclip: { nombre: 'No-clip', icono: 'diametro', min: 80,
+      desc: 'Tecla G: atraviesas la pared que encaras. Cuesta 10 de cordura y arriesga caer al Vacío.' },
+  };
+  world.instinto = (id) => (world.player?.instintos || []).includes(id);
+
+  // RUIDO (v18): las entidades latentes/en alerta investigan los sonidos
+  world.hacerRuido = function (x, y, radio) {
+    world.ruido = { x, y, radio, turno: world.turnTotal };
+  };
+
+  // sube (o baja) la Sintonía; al cruzar 20/40/60/80 se elige 1 de 3 Instintos
+  world.tune = function (n) {
+    const p = world.player;
+    if (!p || world.over) return;
+    const antes = p.sintonia || 0;
+    p.sintonia = Math.max(0, Math.min(100, antes + n));
+    if (p.sintonia === antes) return;
+    for (const u of [20, 40, 60, 80]) {
+      if (antes < u && p.sintonia >= u && !(p.umbrales || (p.umbrales = [])).includes(u)) {
+        p.umbrales.push(u);
+        ofrecerInstinto(u);
+        break;
+      }
+    }
+    world.ui.updateHUD();
+  };
+
+  function ofrecerInstinto(umbral) {
+    const p = world.player;
+    const rng = RNG.create(`${world.runSeed}::instinto::${umbral}`);
+    const pool = Object.keys(INSTINTOS).filter(
+      (k) => !p.instintos.includes(k) && (INSTINTOS[k].min ?? 0) <= umbral
+    );
+    const ofertas = rng.shuffle(pool).slice(0, 3);
+    if (!ofertas.length) return;
+    if (window.Effects) Effects.bubble(p.x, p.y, 'Algo está cambiando en mí…', p);
+    if (window.Sfx) Sfx.cue('generico');
+    world.ui.showInstintos(umbral, ofertas.map((k) => ({ id: k, ...INSTINTOS[k] })), (id) => {
+      p.instintos.push(id);
+      world.log(`INSTINTO: ${INSTINTOS[id].nombre}. Las Backrooms te han dado algo… y se han quedado algo.`, 'good');
+      if (id === 'piel_fluorescente') recomputeFov();
+      world.ui.updateHUD();
+    });
+  }
   // posesión total (mochila + manos) — los pasivos funcionan por llevarlo encima
   world.hasItem = (id) => world.player.inv.includes(id) ||
     (world.player.manos || []).includes(id);
@@ -249,6 +314,7 @@
           world.explored[(cy + y) * g.w + (cx + x)] = 0;
       // el render 3D reconstruye su escena al ver cambiar esta versión
       world.mapaVersion = (world.mapaVersion || 0) + 1;
+      world.tune(2); // presenciar la no-euclidianidad deja huella
       return true;
     }
     return false;
@@ -275,6 +341,7 @@
     world.player = {
       x: 0, y: 0, rx: 0, ry: 0, dir: 'down', flip: false, rot: 2,
       salud: 100, cordura: 100, sed: 100, hambre: 100,
+      sintonia: 0, instintos: [], umbrales: [],
       inv: [], manos: [null, null], luz: false, viva: true,
     };
     world.journal = [];
@@ -329,6 +396,8 @@
     world.turn = 0;
     world.visionMod = 0;
     world.luzBloqueada = false;
+    world.escondido = null;
+    world.ruido = null;
     if (!world.visited.includes(id)) world.visited.push(id);
     Profiles.registrarEntrada(id);
 
@@ -585,10 +654,20 @@
     // descansar en niveles seguros repone la mente (hasta 70)
     if (world.level.peligro <= 1 && world.player.cordura < 70 && world.turn % 25 === 0)
       world.sanity(1);
-    if (world.turn % 9 === 0) world.thirst(-1);
-    if (world.turn % 15 === 0) world.hunger(-1);
+    const drenaje = world.instinto('visceras_vacio') ? 2 : 1; // vísceras del vacío
+    if (world.turn % (9 * drenaje) === 0) world.thirst(-1);
+    if (world.turn % (15 * drenaje) === 0) world.hunger(-1);
     if (world.player.sed <= 0 && world.turn % 3 === 0) world.hurt(2, 'la deshidratación', true);
     if (world.player.hambre <= 0 && world.turn % 5 === 0) world.hurt(1, 'la inanición', true);
+
+    // Sintonía (v18): el lugar cala en ti — o te suelta, muy despacio
+    if (world.instinto('sangre_amarilla') && world.turnTotal % 12 === 0 && world.player.salud < 100)
+      world.player.salud = Math.min(100, world.player.salud + 1);
+    if (world.turnTotal % 50 === 0 && world.player.cordura < 25) world.tune(2);
+    if (world.turnTotal % 40 === 0 && world.level.peligro >= 4) world.tune(1);
+    if (world.turnTotal % 50 === 0 && world.level.peligro <= 1) world.tune(-1);
+    // el ruido reciente caduca
+    if (world.ruido && world.turnTotal - world.ruido.turno > 8) world.ruido = null;
 
     // HUD contextual (v15): sin barras — el personaje PIENSA sus estados en
     // bocadillos, con histéresis para no repetirse cada turno
@@ -605,6 +684,8 @@
       piensa('sed', P.sed < 30, P.sed > 55, 'Tengo la garganta seca. Necesito beber.');
       piensa('sed2', P.sed <= 5, P.sed > 20, 'Agua… lo que sea… AGUA.');
       piensa('hambre', P.hambre < 30, P.hambre > 55, 'Me ruge el estómago.');
+      piensa('sint', (P.sintonia || 0) >= 85, (P.sintonia || 0) < 70,
+        'Las paredes ya no me susurran. Me HABLAN. Y las entiendo.');
       if ((world.level.reglas || []).includes('frio') &&
           world.turn % 38 === 12 && !world.hasItem('chaqueta'))
         Effects.bubble(P.x, P.y, 'Me castañetean los dientes…', P);
@@ -657,6 +738,10 @@
 
   function tryMove(dx, dy, opts) {
     if (world.busy || world.over) return;
+    if (world.escondido) {
+      world.log('Estás dentro del escondite. ESPACIO para salir.', 'event');
+      return;
+    }
     const reglas = world.level.reglas || [];
     if (reglas.includes('controles_invertidos')) { dx = -dx; dy = -dy; }
     // orientación del sprite (en 3ª persona, retroceder no gira al personaje)
@@ -690,6 +775,7 @@
           ent.reveladaHasta = world.turn + 6;
           world.log(`¡Chocas con algo en la oscuridad! ¡${ent.def.nombre} estaba ahí!`, 'danger');
           world.sanity(-3);
+          world.tune(4); // tocar lo que vive aquí te sintoniza con esto
           if (window.Sfx) Sfx.cue(ent.def.glyph);
           if (window.Effects) Effects.doShake(3, 120);
           worldStep(); // el susto consume el turno
@@ -732,6 +818,7 @@
       world.log(`Has derribado a ${ent.def.nombre}.`, 'good');
       if (window.Effects) Effects.particles(ent.x, ent.y, ent.def.color, 20);
       world.sanity(-2); // matar en las Backrooms también pesa
+      world.tune(8);    // …y el lugar toma nota de ti
       return;
     }
     world.log(`Golpeas a ${ent.def.nombre} con la tubería.`, 'good');
@@ -753,6 +840,8 @@
 
   function interact() {
     if (world.busy || world.over) return;
+    // dentro de un escondite: ESPACIO sale
+    if (world.escondido) { toggleEsconder(null); return; }
     const ex = world.map.exits.find((e) => e.x === world.player.x && e.y === world.player.y);
     if (ex) { world.ui.showExitModal(ex.def); return; }
     // contenedores registrables
@@ -760,6 +849,11 @@
       (p) => p.contenedor && !p.registrado && p.x === world.player.x && p.y === world.player.y
     );
     if (cont) { registrar(cont); return; }
+    // esconderse en un mueble YA registrado (taquilla, nevera, archivador)
+    const esc = (world.map.props || []).find(
+      (p) => ESCONDITES.has(p.id) && p.registrado && p.x === world.player.x && p.y === world.player.y
+    );
+    if (esc) { toggleEsconder(esc); return; }
     // agua adyacente: TÚ decides si bebes (el lore decide las consecuencias)
     const hayAgua = [[0, -1], [0, 1], [-1, 0], [1, 0]].some(
       ([ax, ay]) => MapGen.at(world.map.grid, world.player.x + ax, world.player.y + ay) === T.AGUA
@@ -782,6 +876,7 @@
             if (mala) {
               world.hurt(14, 'el agua contaminada', true);
               world.sanity(-8);
+              world.tune(6); // esa agua ya era parte del lugar; ahora tú también
               world.log('Arde al tragar. El brillo del agua NO era un buen augurio.', 'danger');
             } else {
               world.thirst(30);
@@ -804,7 +899,13 @@
   function registrar(cont) {
     cont.registrado = true;
     if (window.Sfx) Sfx.play('registrar');
+    world.hacerRuido(world.player.x, world.player.y, 10); // registrar HACE RUIDO
     world.rollDice(`Registras ${NOMBRES_CONT[cont.id] ?? 'el contenedor'}…`, (d) => {
+      // lengua de las paredes: los contenedores te susurran — nunca pifias
+      if (d < 7 && world.instinto('lengua_paredes')) {
+        world.log('Las paredes susurran: «ahí no». Retiras la mano a tiempo.', 'good');
+        d = 7;
+      }
       if (d >= 14) {
         const pool = ['agua_almendras', 'agua_almendras', 'botiquin', 'amuleto', 'linterna', 'chaqueta', 'tuberia', 'fuego_griego', 'guante_paralisis', 'trebol'];
         const id = pool[Math.min(pool.length - 1, Math.floor((d - 14) / 7 * pool.length + world.rng.int(0, 2)))];
@@ -908,7 +1009,7 @@
         Effects.particles(e.x, e.y, '#ff8a30', 14);
         Effects.number(e.x, e.y, '−30', '#ff8a30');
       }
-      if (e.vida <= 0) { e.viva = false; world.log(`${e.def.nombre} arde hasta desaparecer.`, 'good'); }
+      if (e.vida <= 0) { e.viva = false; world.log(`${e.def.nombre} arde hasta desaparecer.`, 'good'); world.tune(5); }
     }
     if (window.Effects) Effects.flash(world.player.x, world.player.y, '#ff8a30');
     if (!alcanzadas) world.log('Las llamas se apagan sin alcanzar a nada.', 'event');
@@ -952,12 +1053,15 @@
     }
     if (def.efecto?.pasivo) { world.log(`${def.nombre}: su efecto es pasivo, basta con llevarlo.`, 'event'); return; }
     if (def.efecto) {
+      // sangre amarilla: el agua de almendras ya no te repone como antes
+      const mitad = id === 'agua_almendras' && world.instinto('sangre_amarilla') ? 0.5 : 1;
       if (def.efecto.salud) {
         world.player.salud = Math.min(100, world.player.salud + def.efecto.salud);
         if (window.Effects) Effects.number(world.player.x, world.player.y, '+' + def.efecto.salud + ' ♥', '#9ee8a0');
       }
-      if (def.efecto.cordura) world.sanity(def.efecto.cordura);
-      if (def.efecto.sed) world.thirst(def.efecto.sed);
+      if (def.efecto.cordura) world.sanity(Math.round(def.efecto.cordura * mitad));
+      if (def.efecto.sed) world.thirst(Math.round(def.efecto.sed * mitad));
+      if (id === 'amuleto') world.tune(-5); // el ancla al hogar te DES-sintoniza
       world.player.inv.splice(slot, 1);
       world.log(`Usas: ${def.nombre}.`, 'good');
       world.ui.updateHUD();
@@ -972,16 +1076,18 @@
     const ent = world.entities.find((e) => e.viva && e.x === tx && e.y === ty);
     if (ent) {
       golpear(ent);
+      world.hacerRuido(world.player.x, world.player.y, 8);
     } else {
       world.log('Golpeas al aire. El ruido corre por los pasillos…', 'event');
       if (window.Sfx) Sfx.play('golpe');
+      world.hacerRuido(tx, ty, 8);
     }
     worldStep();
   }
 
   // usar lo que llevas en la mano con el ratón (v17): 0 = clic izq, 1 = clic der
   function usarMano(m) {
-    if (world.busy || world.over || !world.player || !world.level) return;
+    if (world.busy || world.over || !world.player || !world.level || world.escondido) return;
     const manos = world.player.manos || [null, null];
     const id = manos[m];
     if (id === '=') {
@@ -1015,6 +1121,91 @@
     world.ui.updateHUD();
   }
 
+  // ARROJAR (v18): lanzas el objeto a un punto visible lejano — el golpe hace
+  // RUIDO allí y distrae a lo que acecha. El objeto queda en el suelo.
+  function arrojarItem(slot) {
+    const id = world.player.inv[slot];
+    if (!id || world.over) return;
+    const g = world.map.grid;
+    const spots = [];
+    for (let dy = -7; dy <= 7; dy++)
+      for (let dx = -7; dx <= 7; dx++) {
+        const d = Math.abs(dx) + Math.abs(dy);
+        if (d < 4 || d > 7) continue;
+        const nx = world.player.x + dx, ny = world.player.y + dy;
+        if (nx < 1 || ny < 1 || nx >= g.w - 1 || ny >= g.h - 1) continue;
+        if (!MapGen.walkable(g.t[ny * g.w + nx])) continue;
+        if (world.light[ny * g.w + nx] > 0.05) spots.push([nx, ny]);
+      }
+    if (!spots.length) { world.log('No ves ningún hueco al que arrojarlo.', 'event'); return; }
+    const [tx, ty] = world.rng.pick(spots);
+    world.player.inv.splice(slot, 1);
+    world.map.items.push({ x: tx, y: ty, id });
+    world.itemsVersion = (world.itemsVersion || 0) + 1;
+    world.hacerRuido(tx, ty, 12);
+    if (window.Effects) {
+      Effects.proyectil(world.player.x, world.player.y, tx, ty, '#d8c8a0');
+      Effects.flash(tx, ty, '#d8c8a0');
+    }
+    if (window.Sfx) Sfx.play('golpe');
+    world.log(`Arrojas ${world.data.objects[id].nombre} lejos. El golpe resuena en los pasillos.`, 'event');
+    world.ui.updateHUD();
+    worldStep();
+  }
+
+  // No-clip (Instinto de umbral 80): atraviesas la pared que encaras
+  function noclip() {
+    if (world.busy || world.over || world.escondido) return;
+    if (!world.instinto('noclip')) {
+      if ((world.player.instintos || []).length)
+        world.log('Sabes que se puede… pero tu cuerpo aún no. (Instinto No-clip, Sintonía 80.)', 'event');
+      return;
+    }
+    const [fx, fy] = ROT_VEC[world.player.rot ?? 2];
+    const g = world.map.grid;
+    const wx = world.player.x + fx, wy = world.player.y + fy;
+    const ox = world.player.x + fx * 2, oy = world.player.y + fy * 2;
+    if (MapGen.at(g, wx, wy) !== T.PARED) { world.log('Ahí no hay pared que atravesar.', 'event'); return; }
+    if (!MapGen.walkable(MapGen.at(g, ox, oy))) { world.log('Sientes el otro lado: no hay NADA transitable.', 'event'); return; }
+    if (world.entities.some((e) => e.viva && e.x === ox && e.y === oy)) {
+      world.log('Algo ocupa el otro lado. Mejor no aparecer DENTRO de ello.', 'danger');
+      return;
+    }
+    world.rollDice('Empujas tu cuerpo A TRAVÉS de la pared…', (d) => {
+      if (d <= 3) { die('Te des-encajaste de la realidad. El Vacío no devuelve nada.'); return; }
+      world.player.x = ox;
+      world.player.y = oy;
+      world.sanity(-10);
+      if (world.over) return;
+      world.tune(4);
+      world.log('Atraviesas la pared como quien cruza agua fría.', 'good');
+      if (window.Sfx) Sfx.play('crujido');
+      if (window.Effects) Effects.particles(ox, oy, '#d9c66e', 12);
+      worldStep();
+    });
+  }
+
+  // ---------- esconderse (v18): taquillas y muebles registrados ----------
+  const ESCONDITES = new Set(['taquilla', 'nevera', 'archivador']);
+  function toggleEsconder(prop) {
+    if (world.escondido) {
+      world.escondido = null;
+      world.log('Sales del escondite, con el corazón en la garganta.', 'event');
+      if (window.Sfx) Sfx.play('puerta');
+      worldStep();
+      return;
+    }
+    const vistoPor = world.entities.some((e) => e.viva && e.estado === 'caza' &&
+      Math.abs(e.x - world.player.x) + Math.abs(e.y - world.player.y) <= 6);
+    world.escondido = { x: prop.x, y: prop.y, delatado: vistoPor };
+    world.log(vistoPor
+      ? `Te metes en ${NOMBRES_CONT[prop.id] ?? 'el mueble'}… pero algo te VIO entrar.`
+      : `Te metes en ${NOMBRES_CONT[prop.id] ?? 'el mueble'} y contienes la respiración.`,
+      vistoPor ? 'danger' : 'event');
+    if (window.Sfx) Sfx.play('puerta');
+    worldStep();
+  }
+
   // ---------- cruzar salidas ----------
   function crossExit(def) {
     const tipo = def.tipo;
@@ -1025,7 +1216,21 @@
       return;
     }
     if (tipo === 'escape') {
-      win();
+      // el precio de la Sintonía: cuanto más eres de ESTE lado, menos te deja
+      // salir la realidad (d20 contra sintonía/5 — a 100 no hay vuelta)
+      const s = world.player.sintonia || 0;
+      if (s >= 10) {
+        world.rollDice('La salida brilla… pero ¿te reconocerá la realidad como suyo?', (d) => {
+          if (d <= Math.floor(s / 5)) {
+            world.log(`Dado: ${d}. La membrana te ESCUPE de vuelta. Ya eres demasiado de este lado.`, 'danger');
+            world.sanity(-8);
+            if (window.Effects) { Effects.doShake(7, 320); Effects.bubble(world.player.x, world.player.y, 'No… me ha… rechazado.', world.player); }
+            if (window.Sfx) Sfx.play('dano');
+          } else {
+            win();
+          }
+        });
+      } else win();
       return;
     }
     if (tipo === 'llave') {
@@ -1051,6 +1256,8 @@
         destino = world.rng.pick(world.visited);
       }
       def._destinoResuelto = destino; // para reconocer esta salida al volver
+      // cruzar por donde nadie debería te sintoniza con el lugar
+      if (tipo === 'void' || tipo === 'arriesgada') world.tune(5);
       world.prevStack.push(world.level.id);
       enterLevel(destino, def.texto, { sinRetorno: esSinRetorno(def) });
     };
@@ -1112,6 +1319,8 @@
           salud: world.player.salud, cordura: world.player.cordura,
           sed: world.player.sed, hambre: world.player.hambre,
           inv: world.player.inv, manos: world.player.manos,
+          sintonia: world.player.sintonia, instintos: world.player.instintos,
+          umbrales: world.player.umbrales,
         },
         journal: world.journal,
         visited: world.visited,
@@ -1133,6 +1342,8 @@
       x: 0, y: 0, rx: 0, ry: 0, dir: 'down', flip: false, rot: 2,
       salud: s.player.salud, cordura: s.player.cordura,
       sed: s.player.sed, hambre: s.player.hambre,
+      sintonia: s.player.sintonia || 0, instintos: s.player.instintos || [],
+      umbrales: s.player.umbrales || [],
       inv: s.player.inv, manos: s.player.manos || [null, null],
       luz: false, viva: true,
     };
@@ -1153,6 +1364,6 @@
   window.Game = {
     world, startRun, continueRun, loadSave, Profiles,
     tryMove, wait, interact, toggleLuz, useItem, crossExit,
-    girar, avanzar, equipar, desequipar, usarMano, tirarItem,
+    girar, avanzar, equipar, desequipar, usarMano, tirarItem, arrojarItem, noclip,
   };
 })();

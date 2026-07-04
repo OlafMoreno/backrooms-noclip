@@ -123,6 +123,28 @@ norte, placa 3D a altura de vista) y las cajas decorativas son contenedores regi
 `ladoTex()` en render3d: TODAS las caras de cajas/muebles/marcos con textura (nada plano).
 `?abrir=mochila` (con autostart) abre el panel para capturas.
 
+**v18 — LA SINTONÍA (RPG del lore, no tradicional)**: `player.sintonia` 0-100 (`world.tune(n)`)
+sube con horrores (matar +8, fuego +5/kill, choque a oscuras +4, agua mala +6, remodelación
++2, salida void/arriesgada +5, goteos por cordura<25 y peligro≥4) y baja apenas (amuleto −5,
+peligro≤1 −1/50t). Umbrales 20/40/60/80 → `ofrecerInstinto` (RNG `runSeed::instinto::umbral`)
+→ `ui.showInstintos` (elige 1 de 3 cartas; el selftest clica la primera). 8 Instintos
+(`INSTINTOS` en game.js): oido_moqueta (minimapa), pies_moqueta (detección −2),
+reflejos_errante (25% esquiva), visceras_vacio (drenaje ÷2), lengua_paredes (sin pifias al
+registrar), piel_fluorescente (+1 visión, inmune a atraida_luz), sangre_amarilla (regen 1/12t,
+agua ÷2), noclip (min 80; tecla G, −10 cordura, d20≤3 = Vacío). PRECIO: en `detecta()` las
+no-cazadoras te ignoran con prob (sintonia−20)/180, y la salida `escape` tira d20 vs
+sintonia/5 — fallo = «la realidad te rechaza» (a 100 no se puede escapar). Moodle ojo
+amarillo fijo con sintonía≥10. **Combate/escape**: TELEGRAPH en `atacar(world,e,rng)` —
+anuncia ⚠ un turno (parpadeo ámbar en render3d), moverse lo esquiva; Cazador solo avisa su
+1er golpe; guard `_turnoAtaque` (un intento/turno). RUIDO: `world.hacerRuido(x,y,radio)`
+(registrar r10, golpes r8, arrojar r12; caduca a los 8 turnos) → entidades no-caza lo
+investigan (`stepHacia`). Rastro: 3 turnos sin detectar → abandona (contador `sinVerte`).
+`Game.arrojarItem` (botón «Arrojar» en la ficha) = distracción. ESCONDERSE: ESPACIO sobre
+taquilla/nevera/archivador REGISTRADO (`world.escondido`, `ESCONDITES` en game.js);
+indetectable salvo delatado (te vieron entrar o tirada 15%/4% cerca); sacado del escondite
+= daño ×1.5; jugador invisible en ambos renders; tryMove/usarMano bloqueados dentro.
+`?abrir=instinto` fuerza el modal. sintonia/instintos/umbrales viajan en el guardado.
+
 (Todos existen y están committeados. v3: render cenital con paredes finas autotile en `tiles.js`/`render.js`,
 pixel-art data-driven en `sprites.js` con override PNG desde `game/assets/sprites/`, efectos de combate
 en `effects.js`, props/contenedores registrables en `mapgen.js`/`game.js`.)

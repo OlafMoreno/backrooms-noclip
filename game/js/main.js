@@ -154,6 +154,7 @@
       Game.interact();
     } else if (ev.code === 'KeyX') Game.wait();
     else if (ev.code === 'KeyF') Game.toggleLuz();
+    else if (ev.code === 'KeyG') Game.noclip();
     else if (ev.code === 'KeyB') world.ui.toggleBackpack();
     else if (ev.code === 'KeyL') world.ui.toggleLog();
     else if (ev.code === 'KeyJ') world.ui.toggleJournal();
@@ -248,6 +249,8 @@
     } else {
       setTimeout(() => document.getElementById('btn-enter').click(), 50);
     }
+    // depuración visual: ?abrir=instinto fuerza un umbral de Sintonía
+    if (params.get('abrir') === 'instinto') setTimeout(() => Game.world.tune(22), 500);
     // depuración visual: ?abrir=mochila abre el panel tras entrar
     if (params.get('abrir') === 'mochila') {
       setTimeout(() => {
@@ -313,6 +316,13 @@
         if (modal.style.display !== 'none') {
           const btn = Math.random() < 0.7 ? document.getElementById('btn-cross') : document.getElementById('btn-stay');
           if (btn && btn.style.display !== 'none') btn.click(); else document.getElementById('btn-stay').click();
+          acciones++;
+          return;
+        }
+        // modal de Instintos (v18): elige la primera carta
+        const instModal = document.getElementById('instinto-modal');
+        if (instModal && instModal.style.display !== 'none') {
+          document.querySelector('.inst-card')?.click();
           acciones++;
           return;
         }
