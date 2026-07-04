@@ -403,7 +403,7 @@
     world.luzBloqueada = false;
     world.escondido = null;
     world.ruido = null;
-    world._caminataT = 150; // turnos de caminata antes de que el nivel "ceda"
+    world._caminataT = 1200; // turnos de caminata antes de que el nivel "ceda"
     if (!world.visited.includes(id)) world.visited.push(id);
     Profiles.registrarEntrada(id);
 
@@ -656,9 +656,9 @@
 
     // salidas por CAMINATA (v20): algunos caminos de la wiki se cruzan ANDANDO
     // («caminar sin rumbo hasta que…») — tras muchos turnos, el nivel cede
-    if ((world.map.caminatas || []).length && world.turn >= (world._caminataT || 150) && !world.busy) {
+    if ((world.map.caminatas || []).length && world.turn >= (world._caminataT || 1200) && !world.busy) {
       const defC = world.map.caminatas[0];
-      world._caminataT = world.turn + 90; // si lo rechazas, volverá a asomar
+      world._caminataT = world.turn + 200; // si lo rechazas, volverá a asomar
       world.ui.showChoice(
         'Tus pasos te llevan',
         `Llevas una eternidad caminando y el paisaje empieza a CEDER. ${defC.texto}. Un paso más y no habrá vuelta al aquí-ahora.`,

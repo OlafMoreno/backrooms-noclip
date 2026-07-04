@@ -165,8 +165,9 @@ mapgen deriva del texto de la wiki (o campo `mecanica` en la ficha): `romper` = 
 agrietada (exige pared norte; `def._mec`/`def._abierta`; ESPACIO → `intentarRomper` con
 dado — tubería en mano umbral 7, puños 12 y −2 salud; al abrir `mapaVersion++` y el hueco
 blanco brilla con bloom — PINTORES.grieta/boquete en render3d y bloque en drawExit 2D);
-`caminata` = SIN casilla (`map.caminatas`): a los `world._caminataT` (150) turnos en el
-nivel, showChoice ofrece cruzar (reaparece cada 90 si la rechazas). Level 0 = 150×150 SIN
+`caminata` = SIN casilla (`map.caminatas`): a los `world._caminataT` (1200) turnos en el
+nivel, showChoice ofrece cruzar (reaparece cada 200 si la rechazas) — el usuario quiere
+la caminata LARGA de verdad. Level 0 = 150×150 SIN
 `infinito` (el sistema de ventana deslizante queda dormido — nada lo usa; el petardeo de
 expansión desaparece por diseño). Mapas ESCALADOS por nº de salidas (≥3 ×1.25, ≥5 ×1.45,
 cap 190) y salidas REPARTIDAS: pool ancho (dist ≥ 45% del máx) + greedy max-min contra
