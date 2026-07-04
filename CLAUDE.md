@@ -88,6 +88,19 @@ incluye manos) + mochila (B, drag&drop + EMPUÑAR). `ui.showChoice` = elecciones
 `_descCache` (no reescribir localStorage por turno); salidas clave `levelId::texto`.
 M/N = mapa (mute SOLO en menú ⚙). `Sfx.stopAmbient()` al ENTRAR en enterLevel.
 
+**v16 — pulido de HUD y controles**: SIN Q/E en tercera persona (solo `?cam=alta` rota cámara);
+mantener tecla = 1 paso/150 ms (throttle de auto-repeat en main.js). HUD sin nombre de
+nivel/peligro ni volumen: TODO en Ajustes, que ahora abre/cierra **ESC** (también cierra
+mapa/mochila antes). Registro: pequeño arriba-izq, cada mensaje se desvanece a los ~5 s;
+historial completo en `#log-panel` (botón pergamino o **L**, `ui.toggleLog`). **Moodles**
+estilo Project Zomboid (`MOODLES` en ui.js: corazon/yin/gota/pan, 3 niveles de gravedad por
+color). Manos del HUD con icono pixel `mano` espejado (`Icons.img(id, size, flip)` usa
+scaleX(-1)). Bocadillos SIGUEN al jugador: `Effects.bubble(wx, wy, txt, ref)` lee `ref.rx/ry`
+al dibujar. `startRun` pone `world.level = null` (si no, tras morir enterLevel creaba una
+salida de retorno al nivel de la muerte). `window.OPTS` (localStorage `backrooms-opts`):
+`dado:false` hace que showDice resuelva sin overlay (~120 ms). Parpadeo fluorescente raro y
+ocasional en render3d (`panelMat` + dlight, ~1 vez/min, no-op con `?nofx=1`).
+
 (Todos existen y están committeados. v3: render cenital con paredes finas autotile en `tiles.js`/`render.js`,
 pixel-art data-driven en `sprites.js` con override PNG desde `game/assets/sprites/`, efectos de combate
 en `effects.js`, props/contenedores registrables en `mapgen.js`/`game.js`.)

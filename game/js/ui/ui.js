@@ -27,15 +27,43 @@
     }
   }
 
-  // ---------- registro ----------
+  // ---------- registro (v16): mensajes pequeños arriba a la izquierda que se
+  // desvanecen solos; el historial completo vive tras el botón-pergamino (L) ----------
+  const historia = [];
   function log(msg, cls) {
+    historia.push({ msg, cls });
+    if (historia.length > 300) historia.shift();
     const logEl = $('game-log');
     const p = document.createElement('p');
     p.textContent = msg;
     if (cls) p.className = cls;
     logEl.prepend(p);
-    while (logEl.children.length > 5) logEl.removeChild(logEl.lastChild);
+    while (logEl.children.length > 4) logEl.removeChild(logEl.lastChild);
+    setTimeout(() => p.classList.add('log-out'), 5000);
+    setTimeout(() => p.remove(), 6100);
+    if ($('log-panel').style.display !== 'none') renderLogFull();
   }
+
+  function renderLogFull() {
+    const el = $('log-full');
+    el.innerHTML = '';
+    for (let i = historia.length - 1; i >= 0; i--) {
+      const p = document.createElement('p');
+      p.textContent = historia[i].msg;
+      if (historia[i].cls) p.className = historia[i].cls;
+      el.appendChild(p);
+    }
+  }
+  function toggleLog(force) {
+    const panel = $('log-panel');
+    const vis = force !== undefined ? force : panel.style.display === 'none';
+    panel.style.display = vis ? 'block' : 'none';
+    if (vis) renderLogFull();
+    if (window.Sfx) Sfx.play('ui');
+  }
+  $('btn-log').onclick = () => toggleLog();
+  $('btn-log-close').onclick = () => toggleLog(false);
+  if (window.Icons) Icons.set($('btn-log'), 'pergamino', 15);
 
   // ---------- HUD (v15: limpio y contextual — manos + mochila, sin barras) ----------
   const ICONOS_INV = {
@@ -47,9 +75,33 @@
 
   function updateHUD() {
     if (!world.player || !world.level) return;
-    $('hud-level').textContent = `${world.level.wikiTitle} · Peligro ${world.level.peligro}/5`;
     renderManos();
+    renderMoodles();
     if ($('backpack-panel').style.display !== 'none') renderBackpack();
+  }
+
+  // ---------- moodles (v16): iconos de estado estilo Project Zomboid ----------
+  // aparecen solo cuando el estado empeora; 3 niveles de gravedad por color
+  const MOODLES = [
+    ['corazon', (p) => p.salud, [60, 35, 15], ['Herido', 'Malherido', 'Crítico']],
+    ['yin', (p) => p.cordura, [50, 35, 15], ['Inquieto', 'Alterado', 'Mente al límite']],
+    ['gota', (p) => p.sed, [50, 30, 10], ['Sediento', 'Muy sediento', 'Deshidratado']],
+    ['pan', (p) => p.hambre, [50, 30, 10], ['Hambriento', 'Famélico', 'Inanición']],
+  ];
+  function renderMoodles() {
+    const cont = $('moodles');
+    cont.innerHTML = '';
+    for (const [icono, get, umbrales, nombres] of MOODLES) {
+      const v = get(world.player);
+      let lvl = 0;
+      for (let i = 0; i < umbrales.length; i++) if (v <= umbrales[i]) lvl = i + 1;
+      if (!lvl) continue;
+      const d = document.createElement('div');
+      d.className = 'moodle moodle-' + lvl;
+      d.title = nombres[lvl - 1];
+      if (window.Icons) d.appendChild(Icons.img(icono, 20));
+      cont.appendChild(d);
+    }
   }
 
   function renderManos() {
@@ -57,19 +109,29 @@
     for (let m = 0; m < 2; m++) {
       const el = $('mano-' + m);
       el.innerHTML = '';
-      el.classList.remove('activa');
+      el.classList.remove('activa', 'vacia');
+      // la mano pixel-art de fondo, espejada según el lado (v16)
+      if (window.Icons) {
+        const hand = Icons.img('mano', 30, m === 1);
+        hand.classList.add('mano-img');
+        el.appendChild(hand);
+      }
       const id = manos[m];
       if (id === '=') {
         el.title = 'Ocupada por el objeto a dos manos';
-        el.textContent = '·';
         continue;
       }
       if (id) {
         const def = world.data.objects[id];
-        if (window.Icons) el.appendChild(Icons.img(ICONOS_INV[id] || 'interrogante', 24));
+        if (window.Icons) {
+          const it = Icons.img(ICONOS_INV[id] || 'interrogante', 22);
+          it.classList.add('mano-item');
+          el.appendChild(it);
+        }
         el.title = `${def.nombre} (clic: guardar en la mochila)`;
         if (id === 'linterna' && world.player.luz) el.classList.add('activa');
       } else {
+        el.classList.add('vacia');
         el.title = (m === 0 ? 'Mano izquierda' : 'Mano derecha') + ' (vacía)';
       }
     }
@@ -223,6 +285,11 @@
 
   // ---------- dado ----------
   function showDice(texto, cb) {
+    // la animación puede apagarse en Ajustes (v16): la tirada se resuelve igual
+    if (window.OPTS && !window.OPTS.dado) {
+      setTimeout(() => cb(1 + Math.floor(Math.random() * 20)), 120);
+      return;
+    }
     const ov = $('dice-overlay'), face = $('dice-face');
     $('dice-text').textContent = texto;
     ov.style.display = 'flex';
@@ -491,7 +558,7 @@
   world.ui = {
     log, updateHUD, flashDamage, showLevelCard, showDice,
     showExitModal, showLevelPicker, showChoice, toggleJournal, showEnd, show, toggleCodex,
-    toggleBackpack,
+    toggleBackpack, toggleLog,
     get flashT() { return flashT; },
   };
 })();

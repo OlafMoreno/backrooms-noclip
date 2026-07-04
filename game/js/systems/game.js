@@ -284,6 +284,9 @@
     world.savedLevels = {};   // niveles visitados, conservados TAL CUAL (v15)
     world.turnTotal = 0;
     world.over = false;
+    // run NUEVA de verdad: si venías de morir, el nivel anterior sigue en
+    // world.level y sin esto enterLevel crearía una salida de retorno hacia él
+    world.level = null;
     enterLevel('level-0', 'Despertaste aquí tras atravesar la realidad.');
   }
 
@@ -587,7 +590,7 @@
       const B = world._boca || (world._boca = {});
       const P = world.player;
       const piensa = (clave, cond, reset, txt) => {
-        if (cond && !B[clave]) { B[clave] = true; Effects.bubble(P.x, P.y, txt); }
+        if (cond && !B[clave]) { B[clave] = true; Effects.bubble(P.x, P.y, txt, P); }
         else if (reset) B[clave] = false;
       };
       piensa('salud', P.salud < 35, P.salud > 55, 'Estoy malherido… esto pinta mal.');
@@ -598,9 +601,9 @@
       piensa('hambre', P.hambre < 30, P.hambre > 55, 'Me ruge el estómago.');
       if ((world.level.reglas || []).includes('frio') &&
           world.turn % 38 === 12 && !world.hasItem('chaqueta'))
-        Effects.bubble(P.x, P.y, 'Me castañetean los dientes…');
+        Effects.bubble(P.x, P.y, 'Me castañetean los dientes…', P);
       if ((world.level.reglas || []).includes('calor') && world.turn % 44 === 20)
-        Effects.bubble(P.x, P.y, 'Este calor me está cociendo vivo.');
+        Effects.bubble(P.x, P.y, 'Este calor me está cociendo vivo.', P);
     }
 
     // entidades

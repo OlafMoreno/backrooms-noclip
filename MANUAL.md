@@ -19,22 +19,28 @@ fluorescentes**, bloom cinematográfico y polvo en suspensión. Alternativas por
 |---|---|
 | W / ↑ | Avanzar un paso hacia donde miras (1 paso = 1 turno) |
 | S / ↓ | Retroceder un paso (sin girarte) |
-| A / D (o Q / E) | Girarte 90° a izquierda/derecha — girar es GRATIS, no gasta turno |
+| A / D | Girarte 90° a izquierda/derecha — girar es GRATIS, no gasta turno |
 | ESPACIO | Interactuar: salidas, muebles registrables, **beber agua**… |
 | X | Esperar un turno |
 | F | Linterna (debe estar EN UNA MANO): cono de luz real (¡atrae a las Deathmoths!) |
 | B | Abrir/cerrar la **mochila** |
 | M (o N) | Ver el mapa de lo explorado |
+| L | Registro completo de mensajes (también con el botón-pergamino de arriba) |
 | J | Diario de ruta de la partida |
 | C | Códice del Errante (expediente y colección) |
 | 1-6 | Usar objeto de la mochila |
+| ESC | **Ajustes**: volumen, controles y opciones (aquí vive ahora el volumen) |
 
-*(La lista de controles vive también en el menú de ajustes ⚙, junto al volumen.)*
+*(Mantener pulsada W camina a velocidad constante — sin ráfagas.)*
 
 - **Objetivo**: encontrar una de las rarísimas rutas de escape (⭐). La muerte es permanente.
 - **HUD contextual**: no hay barras de vida ni contador de turnos. Tu personaje **piensa en
   bocadillos** («Tengo la garganta seca…», «Estoy malherido…») y su propio sprite se ve
-  ensangrentado cuando está grave. Los estados los llevas TÚ en la cabeza, como él.
+  ensangrentado cuando está grave. Además, cuando un estado empeora aparecen **iconos de
+  estado** (estilo Project Zomboid) arriba a la derecha: ♥ salud, ☯ cordura, 💧 sed, 🍞 hambre —
+  amarillo → naranja → rojo (pulsante) según la gravedad.
+- **Registro**: los mensajes aparecen pequeños arriba a la izquierda y se desvanecen solos;
+  el historial completo está tras el **botón-pergamino** (o tecla `L`).
 - **Volver atrás**: ya no hay tecla mágica. La única manera de regresar es **la puerta por la
   que llegaste** (queda marcada donde apareces) — y cada nivel se conserva TAL CUAL lo
   dejaste. Excepción: si CAÍSTE (agujero, trampilla, vacío), no hay vuelta: nadie escala eso.
@@ -110,10 +116,11 @@ mismo nombre y recargar. Los iconos del HUD son pixel-art generado por el propio
 ## 5b. Sonidos
 
 Todo el sonido del juego (pasos, golpes, dados, ambientes…) está **sintetizado por código**:
-no necesitas hacer nada para que suene. Tecla `M` para silenciar.
+no necesitas hacer nada para que suene. Para silenciar: botón del menú de ajustes (`ESC`).
 
-- **Volumen**: slider 🔊 en el HUD y **menú de ajustes ⚙** (junto al slider, o botón en el título)
-  con tres canales separados: **General**, **Efectos** y **Ambiente/música**. Todo se recuerda.
+- **Volumen**: en partida vive en el **menú de ajustes** (`ESC`); en el título hay slider 🔊 y
+  botón Sonido. Tres canales separados: **General**, **Efectos** y **Ambiente/música**, y el
+  interruptor de la **animación del dado**. Todo se recuerda.
 - Al pasar de nivel (tarjeta de presentación) el ambiente se detiene y suena un pad suave.
 - **Sustituir un efecto**: pon un `.mp3`/`.ogg`/`.wav` en `game/assets/sounds/` con el nombre
   del efecto (`golpe.mp3`, `paso.mp3`…). Lista completa en el `LEEME.txt` de esa carpeta.

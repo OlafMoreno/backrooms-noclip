@@ -33,11 +33,12 @@
   }
 
   // bocadillo de pensamiento sobre el personaje (HUD contextual v15);
-  // se encolan: nunca se pisan dos a la vez
+  // se encolan: nunca se pisan dos a la vez. Si se pasa `ref` (el jugador),
+  // el bocadillo LE SIGUE en vez de quedarse clavado en la casilla (v16)
   let bubbleEnd = 0;
-  function bubble(wx, wy, txt) {
+  function bubble(wx, wy, txt, ref) {
     const t0 = Math.max(now(), bubbleEnd);
-    list.push({ type: 'bub', wx, wy, txt, t0, dur: 2600 });
+    list.push({ type: 'bub', wx, wy, txt, ref, t0, dur: 2600 });
     bubbleEnd = t0 + 2200;
   }
 
@@ -59,7 +60,8 @@
       if (t < e.t0) continue; // bocadillos en cola: aún no les toca
       // el timestamp del rAF puede ir ligeramente por detrás de performance.now()
       const k = Math.min(1, Math.max(0, (t - e.t0) / e.dur));
-      const [sx, sy] = P(e.wx, e.wy);
+      // los bocadillos con referencia viajan con su dueño (encima de la cabeza)
+      const [sx, sy] = e.ref ? P(e.ref.rx, e.ref.ry) : P(e.wx, e.wy);
       ctx.save();
       if (e.type === 'bub') {
         // fundido de entrada/salida

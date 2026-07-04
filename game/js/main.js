@@ -40,19 +40,28 @@
   document.addEventListener('keydown', () => Sfx.unlock(), { once: true });
   document.addEventListener('click', () => Sfx.unlock(), { once: true });
 
-  // sliders de volumen (HUD y título), sincronizados y persistentes
-  for (const sid of ['vol-slider', 'vol-slider-title']) {
+  // slider de volumen del título (en partida el volumen vive en Ajustes: ESC)
+  for (const sid of ['vol-slider-title']) {
     const s = document.getElementById(sid);
     if (!s) continue;
     s.value = Math.round(Sfx.volumen * 100);
     s.addEventListener('input', () => {
       Sfx.setVolume(s.value / 100);
-      for (const otro of ['vol-slider', 'vol-slider-title', 'snd-general']) {
-        const o = document.getElementById(otro);
-        if (o && o !== s) o.value = s.value;
-      }
+      const o = document.getElementById('snd-general');
+      if (o) o.value = s.value;
     });
   }
+
+  // ---------- opciones persistentes (v16) ----------
+  window.OPTS = { dado: true };
+  try { Object.assign(window.OPTS, JSON.parse(localStorage.getItem('backrooms-opts')) || {}); }
+  catch (e) { /* opciones corruptas: valores por defecto */ }
+  const optDado = document.getElementById('opt-dado');
+  optDado.checked = OPTS.dado;
+  optDado.onchange = () => {
+    OPTS.dado = optDado.checked;
+    try { localStorage.setItem('backrooms-opts', JSON.stringify(OPTS)); } catch (e) {}
+  };
 
   // ---------- menú de ajustes de sonido ----------
   const sndMenu = document.getElementById('sound-menu');
@@ -83,10 +92,8 @@
       Sfx.setVolume(s.value / 100, canal);
       document.getElementById(id + '-v').textContent = s.value + '%';
       if (canal === 'general') {
-        for (const otro of ['vol-slider', 'vol-slider-title']) {
-          const o = document.getElementById(otro);
-          if (o) o.value = s.value;
-        }
+        const o = document.getElementById('vol-slider-title');
+        if (o) o.value = s.value;
       }
     });
   }
@@ -101,7 +108,6 @@
     pintarBtnMute();
   };
   document.getElementById('btn-snd-close').onclick = cerrarSndMenu;
-  document.getElementById('btn-sound-menu').onclick = abrirSndMenu;
   // mochila (v15): botón del HUD y cierre del panel
   const btnMochila = document.getElementById('btn-mochila');
   if (btnMochila) {
@@ -113,12 +119,16 @@
   const btnSndTitle = document.getElementById('btn-sound-menu-title');
   if (btnSndTitle) btnSndTitle.onclick = abrirSndMenu;
 
+  let lastStepT = 0; // mantener pulsado = velocidad CONSTANTE (v16)
   document.addEventListener('keydown', (ev) => {
     if (!world.level || world.over) return;
     if (document.getElementById('screen-card').style.display !== 'none') return;
     const tercera = use3D && Render3D.modo === 'tercera';
     if (KEYS[ev.code]) {
       ev.preventDefault();
+      // el auto-repeat del teclado dispara ráfagas: se limita a un paso cada 150 ms
+      if (ev.repeat && performance.now() - lastStepT < 150) return;
+      lastStepT = performance.now();
       const [sdx, sdy] = KEYS[ev.code]; // dirección de PANTALLA pulsada
       if (tercera) {
         // 3ª persona: W avanza, S retrocede, A/D giran al personaje (gratis)
@@ -136,20 +146,26 @@
         }
         Game.tryMove(dx, dy);
       }
-    } else if (ev.code === 'KeyQ' || ev.code === 'KeyE') {
-      if (tercera) Game.girar(ev.code === 'KeyQ' ? -1 : 1);
-      else if (use3D) Render3D.rotar(ev.code === 'KeyQ' ? 1 : -1);
+    } else if ((ev.code === 'KeyQ' || ev.code === 'KeyE') && use3D && !tercera) {
+      // solo la cámara Octopath (?cam=alta) rota con Q/E; en 3ª persona ya giran A/D
+      Render3D.rotar(ev.code === 'KeyQ' ? 1 : -1);
     } else if (ev.code === 'Space') {
       ev.preventDefault();
       Game.interact();
     } else if (ev.code === 'KeyX') Game.wait();
     else if (ev.code === 'KeyF') Game.toggleLuz();
     else if (ev.code === 'KeyB') world.ui.toggleBackpack();
+    else if (ev.code === 'KeyL') world.ui.toggleLog();
     else if (ev.code === 'KeyJ') world.ui.toggleJournal();
     else if (ev.code === 'KeyC') world.ui.toggleCodex();
     else if (ev.code === 'KeyM' || ev.code === 'KeyN') Minimap.toggleBig();
-    else if (ev.code === 'Escape' && Minimap.visible) Minimap.toggleBig(false);
-    else if (/^Digit[1-6]$/.test(ev.code)) Game.useItem(parseInt(ev.code.slice(5), 10) - 1);
+    else if (ev.code === 'Escape') {
+      // ESC: cierra lo que esté abierto; si no hay nada, abre/cierra Ajustes
+      if (Minimap.visible) Minimap.toggleBig(false);
+      else if (document.getElementById('backpack-panel').style.display !== 'none') world.ui.toggleBackpack(false);
+      else if (sndMenu.style.display !== 'none') cerrarSndMenu();
+      else abrirSndMenu();
+    } else if (/^Digit[1-6]$/.test(ev.code)) Game.useItem(parseInt(ev.code.slice(5), 10) - 1);
   });
 
   // ---------- bucle de animación (solo visual; la lógica es por turnos) ----------

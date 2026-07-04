@@ -210,6 +210,15 @@
     '.........b..', '........bb..', '.......bbb..', '......bbb...',
     '.....bbb....', '....bbb.....', '...bbb......', '..hh........',
     '.hhh........', '.hh.........', '............', '............'] };
+  // mano IZQUIERDA vista desde atrás (pulgar hacia dentro); la derecha se espeja
+  D.mano = { pal: { p: '#d8a878', P: '#b08050', m: '#5f7454' }, m: [
+    '............', '...p.p.p....', '..pppppp....', '..pppppp.p..',
+    '..pppppppp..', '..pppppppp..', '..PpPpPp....', '...ppppp....',
+    '...ppppp....', '...mmmmm....', '...mmmmm....', '............'] };
+  D.pergamino = { pal: { p: '#d8c9a0', P: '#a8946a', l: '#6a5c40' }, m: [
+    '............', '..PPPPPPPP..', '..Pppppppp..', '..pllllllp..',
+    '..pppppppp..', '..plllllpp..', '..pppppppp..', '..pllllllp..',
+    '..pppppppp..', '..plllpppp..', '..PPPPPPPP..', '............'] };
 
   // emojis históricos → id de icono (rules.js y textos siguen escribiendo emojis;
   // la UI los traduce aquí; si no hay traducción, se muestra el texto tal cual)
@@ -238,11 +247,12 @@
     }
     return urls[id];
   }
-  function img(id, size = 16) {
+  function img(id, size = 16, flip = false) {
     const im = document.createElement('img');
     im.className = 'icono';
     im.src = url(id);
     im.style.width = im.style.height = size + 'px';
+    if (flip) im.style.transform = 'scaleX(-1)';
     im.alt = '';
     return im;
   }

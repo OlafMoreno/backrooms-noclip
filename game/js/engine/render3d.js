@@ -33,6 +33,8 @@
   let texCache = new Map();      // clave -> THREE.Texture
   let grain = null;
   let camBobT = 0;
+  let panelMat = null;           // material de los paneles fluorescentes del techo
+  let flkHasta = 0, flkNext = 0, flkOn = true; // parpadeo raro y ocasional (v16)
 
   function tex(canvas, key) {
     if (key && texCache.has(key)) return texCache.get(key);
@@ -276,6 +278,8 @@
     entitySprites.clear();
     itemSprites.clear();
     playerSprite = null;
+    panelMat = null;
+    flkHasta = 0;
     if (!keepTex) texCache.clear(); // rebuilds del mismo nivel reutilizan texturas (sin hitch)
   }
 
@@ -439,9 +443,10 @@
           pgeo.setAttribute('position', new THREE.Float32BufferAttribute(pPos, 3));
           pgeo.setAttribute('uv', new THREE.Float32BufferAttribute(pUv, 2));
           pgeo.setIndex(pIdx);
-          levelGroup.add(new THREE.Mesh(pgeo, new THREE.MeshBasicMaterial({
+          panelMat = new THREE.MeshBasicMaterial({
             color: 0xfff6dc, toneMapped: false, fog: false,
-          })));
+          });
+          levelGroup.add(new THREE.Mesh(pgeo, panelMat));
         }
       }
     } else {
@@ -866,6 +871,26 @@
 
     // luminarias cercanas + polvo en suspensión
     if (window.Atmos3D) Atmos3D.frame(world, t, px, pz, luzOn);
+
+    // parpadeo fluorescente (v16): muy de vez en cuando los paneles del techo
+    // fallan de forma errática durante ~1 segundo (cosmético; sin RNG de juego)
+    if (panelMat && !window.NOFX) {
+      if (!flkHasta) {
+        if (Math.random() < 0.0003) { flkHasta = t + 600 + Math.random() * 1000; flkNext = 0; }
+      } else if (t > flkHasta) {
+        flkHasta = 0;
+        panelMat.color.setHex(0xfff6dc);
+        dlight.intensity = 0.35;
+      } else {
+        if (t > flkNext) {          // cambia de estado a golpes irregulares
+          flkOn = Math.random() < 0.55;
+          flkNext = t + 40 + Math.random() * 140;
+        }
+        const f = flkOn ? 1 : 0.15 + Math.random() * 0.2;
+        panelMat.color.setRGB(f, 0.965 * f, 0.863 * f);
+        dlight.intensity = flkOn ? 0.35 : 0.12;
+      }
+    }
 
     if (CAM_MODO === 'tercera') {
       // --- CÁMARA 3ª PERSONA: pegada a la espalda, baja, inmersiva ---
