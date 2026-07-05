@@ -198,10 +198,161 @@
     } else if (/^Digit[1-6]$/.test(ev.code)) Game.useItem(parseInt(ev.code.slice(5), 10) - 1);
   });
 
+  // ---------- Gamepad (v21) ----------
+  const lastGamepadState = [];
+  let lastGamepadStepT = 0;
+  let lastUINavT = 0;
+
+  function isUIOpen() {
+    if (document.getElementById('screen-card')?.style.display !== 'none') return true;
+    if (document.getElementById('exit-modal')?.style.display !== 'none') return true;
+    if (document.getElementById('choice-modal')?.style.display !== 'none') return true;
+    if (document.getElementById('instinto-modal')?.style.display !== 'none') return true;
+    if (document.getElementById('backpack-panel')?.style.display !== 'none') return true;
+    if (document.getElementById('codex-panel')?.style.display !== 'none') return true;
+    if (document.getElementById('journal-panel')?.style.display !== 'none') return true;
+    if (document.getElementById('sound-menu')?.style.display !== 'none') return true;
+    return false;
+  }
+
+  function getFocusableElements() {
+    const els = Array.from(document.querySelectorAll('button, input, select, [tabindex], .k-mano, .bp-slot, .cdx-nivel'));
+    return els.filter(el => {
+      if (el.tabIndex < 0 && !el.classList.contains('bp-slot') && !el.classList.contains('k-mano') && !el.classList.contains('cdx-nivel')) return false;
+      if (el.disabled) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    });
+  }
+
+  function navigateUI(dx, dy) {
+    const focusables = getFocusableElements();
+    if (focusables.length === 0) return;
+    
+    let current = document.activeElement;
+    if (!current || !focusables.includes(current)) {
+      focusables[0].focus();
+      return;
+    }
+    
+    const crect = current.getBoundingClientRect();
+    const cx = crect.left + crect.width / 2;
+    const cy = crect.top + crect.height / 2;
+    
+    let best = null;
+    let bestScore = Infinity;
+    
+    for (const el of focusables) {
+      if (el === current) continue;
+      const rect = el.getBoundingClientRect();
+      const ex = rect.left + rect.width / 2;
+      const ey = rect.top + rect.height / 2;
+      const diffX = ex - cx;
+      const diffY = ey - cy;
+      
+      if (dx === 1 && diffX <= 0) continue;
+      if (dx === -1 && diffX >= 0) continue;
+      if (dy === 1 && diffY <= 0) continue;
+      if (dy === -1 && diffY >= 0) continue;
+      
+      const distPrimary = dx !== 0 ? Math.abs(diffX) : Math.abs(diffY);
+      const distSec = dx !== 0 ? Math.abs(diffY) : Math.abs(diffX);
+      if (distSec > distPrimary * 2.5) continue;
+      
+      const score = distPrimary + distSec * 2;
+      if (score < bestScore) {
+        bestScore = score;
+        best = el;
+      }
+    }
+    
+    if (best) best.focus();
+  }
+
+  function pollGamepad(t) {
+    if (!navigator.getGamepads) return;
+    const gamepads = navigator.getGamepads();
+    const gp = gamepads[0] || gamepads[1] || gamepads[2] || gamepads[3];
+    if (!gp) return;
+
+    const btns = gp.buttons;
+    const pressed = (i) => btns[i] && btns[i].pressed;
+    const justPressed = (i) => pressed(i) && !lastGamepadState[i];
+
+    const uiOpen = isUIOpen();
+
+    let dx = 0, dy = 0;
+    if (pressed(14) || gp.axes[0] < -0.4) dx = -1;
+    if (pressed(15) || gp.axes[0] > 0.4) dx = 1;
+    if (pressed(12) || gp.axes[1] < -0.4) dy = -1;
+    if (pressed(13) || gp.axes[1] > 0.4) dy = 1;
+
+    if (uiOpen) {
+      if ((dx !== 0 || dy !== 0) && t - lastUINavT > 200) {
+        lastUINavT = t;
+        navigateUI(dx, dy);
+      }
+      if (justPressed(0)) {
+        if (document.activeElement && typeof document.activeElement.click === 'function') {
+          document.activeElement.click();
+        } else if (document.activeElement && document.activeElement.classList.contains('bp-slot')) {
+          const ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+          document.activeElement.dispatchEvent(ev);
+        }
+      }
+      if (justPressed(1) || justPressed(8) || justPressed(9)) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+      }
+    } else {
+      if (!world.level || world.over || world.busy) {
+        for(let i=0; i<btns.length; i++) lastGamepadState[i] = pressed(i);
+        return;
+      }
+
+      if (dx !== 0 || dy !== 0) {
+        if (t - lastGamepadStepT >= 150) {
+          lastGamepadStepT = t;
+          const tercera = use3D && window.Render3D && Render3D.modo === 'tercera';
+          if (tercera) {
+            if (dy === -1) Game.avanzar(1);
+            else if (dy === 1) Game.avanzar(-1);
+            else Game.girar(dx);
+          } else {
+            let ndx = dx, ndy = dy;
+            if (use3D && window.Render3D && Render3D.rot) {
+              const th = -Render3D.rot * Math.PI / 2;
+              const rx = Math.round(Math.cos(th) * dx - Math.sin(th) * dy);
+              const ry = Math.round(Math.sin(th) * dx + Math.cos(th) * dy);
+              ndx = rx; ndy = ry;
+            }
+            Game.tryMove(ndx, ndy);
+          }
+        }
+      }
+
+      if (justPressed(0)) Game.interact();
+      if (justPressed(2)) Game.wait();
+      if (justPressed(3)) Game.toggleLuz();
+      if (justPressed(4)) {
+        if (use3D && window.Render3D && Render3D.modo !== 'tercera') Render3D.rotar(1);
+        else Game.usarMano(0);
+      }
+      if (justPressed(5)) {
+        if (use3D && window.Render3D && Render3D.modo !== 'tercera') Render3D.rotar(-1);
+        else Game.usarMano(1);
+      }
+      if (justPressed(8)) world.ui.toggleBackpack();
+      if (justPressed(9)) document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    }
+
+    for(let i=0; i<btns.length; i++) lastGamepadState[i] = pressed(i);
+  }
+
   // ---------- bucle de animación (solo visual; la lógica es por turnos) ----------
   function lerp(a, b, f) { return a + (b - a) * f; }
 
   function loop(t) {
+    pollGamepad(t);
     requestAnimationFrame(loop);
     if (!world.level || !world.player) return;
     const p = world.player;
