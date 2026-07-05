@@ -215,59 +215,11 @@
     return false;
   }
 
-  function getFocusableElements() {
-    const els = Array.from(document.querySelectorAll('button, input, select, [tabindex], .k-mano, .bp-slot, .cdx-nivel'));
-    return els.filter(el => {
-      if (el.tabIndex < 0 && !el.classList.contains('bp-slot') && !el.classList.contains('k-mano') && !el.classList.contains('cdx-nivel')) return false;
-      if (el.disabled) return false;
-      const rect = el.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0 && getComputedStyle(el).visibility !== 'hidden';
-    });
-  }
-
-  function navigateUI(dx, dy) {
-    const focusables = getFocusableElements();
-    if (focusables.length === 0) return;
-    
-    let current = document.activeElement;
-    if (!current || !focusables.includes(current)) {
-      focusables[0].focus();
-      return;
-    }
-    
-    const crect = current.getBoundingClientRect();
-    const cx = crect.left + crect.width / 2;
-    const cy = crect.top + crect.height / 2;
-    
-    let best = null;
-    let bestScore = Infinity;
-    
-    for (const el of focusables) {
-      if (el === current) continue;
-      const rect = el.getBoundingClientRect();
-      const ex = rect.left + rect.width / 2;
-      const ey = rect.top + rect.height / 2;
-      const diffX = ex - cx;
-      const diffY = ey - cy;
-      
-      if (dx === 1 && diffX <= 0) continue;
-      if (dx === -1 && diffX >= 0) continue;
-      if (dy === 1 && diffY <= 0) continue;
-      if (dy === -1 && diffY >= 0) continue;
-      
-      const distPrimary = dx !== 0 ? Math.abs(diffX) : Math.abs(diffY);
-      const distSec = dx !== 0 ? Math.abs(diffY) : Math.abs(diffX);
-      if (distSec > distPrimary * 2.5) continue;
-      
-      const score = distPrimary + distSec * 2;
-      if (score < bestScore) {
-        bestScore = score;
-        best = el;
-      }
-    }
-    
-    if (best) best.focus();
-  }
+  let vCursor = null;
+  let cursorX = window.innerWidth / 2;
+  let cursorY = window.innerHeight / 2;
+  let aButtonDown = false;
+  let dragTarget = null;
 
   function pollGamepad(t) {
     if (!navigator.getGamepads) return;
@@ -287,23 +239,76 @@
     if (pressed(12) || gp.axes[1] < -0.4) dy = -1;
     if (pressed(13) || gp.axes[1] > 0.4) dy = 1;
 
+    // Analog stick fine-grained movement for virtual cursor
     if (uiOpen) {
-      if ((dx !== 0 || dy !== 0) && t - lastUINavT > 200) {
-        lastUINavT = t;
-        navigateUI(dx, dy);
-      }
-      if (justPressed(0)) {
-        if (document.activeElement && typeof document.activeElement.click === 'function') {
-          document.activeElement.click();
-        } else if (document.activeElement && document.activeElement.classList.contains('bp-slot')) {
-          const ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
-          document.activeElement.dispatchEvent(ev);
+      if (Math.abs(gp.axes[0]) > 0.1) dx = gp.axes[0];
+      if (Math.abs(gp.axes[1]) > 0.1) dy = gp.axes[1];
+    }
+
+    if (uiOpen) {
+      if (!vCursor) {
+        vCursor = document.getElementById('virtual-cursor');
+        if (!vCursor) {
+          vCursor = document.createElement('div');
+          vCursor.id = 'virtual-cursor';
+          document.body.appendChild(vCursor);
         }
       }
+      
+      if (vCursor.style.display !== 'block') {
+        vCursor.style.display = 'block';
+        cursorX = window.innerWidth / 2;
+        cursorY = window.innerHeight / 2;
+      }
+      
+      if (dx !== 0 || dy !== 0) {
+        cursorX += dx * 12;
+        cursorY += dy * 12;
+        cursorX = Math.max(0, Math.min(window.innerWidth, cursorX));
+        cursorY = Math.max(0, Math.min(window.innerHeight, cursorY));
+        vCursor.style.left = cursorX + 'px';
+        vCursor.style.top = cursorY + 'px';
+      }
+
+      const target = document.elementFromPoint(cursorX, cursorY);
+      
+      if (justPressed(0)) {
+        aButtonDown = true;
+        vCursor.classList.add('vc-active');
+        if (target) {
+          target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cursorX, clientY: cursorY }));
+          dragTarget = target;
+        }
+      } else if (pressed(0) && (dx !== 0 || dy !== 0) && aButtonDown) {
+        if (target) {
+          target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: cursorX, clientY: cursorY }));
+        }
+      } else if (!pressed(0) && aButtonDown) {
+        aButtonDown = false;
+        vCursor.classList.remove('vc-active');
+        if (target) {
+          target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cursorX, clientY: cursorY }));
+          if (dragTarget === target) {
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: cursorX, clientY: cursorY }));
+          }
+        }
+        dragTarget = null;
+      }
+
       if (justPressed(1) || justPressed(8) || justPressed(9)) {
         document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
       }
     } else {
+      if (vCursor && vCursor.style.display === 'block') {
+        vCursor.style.display = 'none';
+        if (aButtonDown) {
+           aButtonDown = false;
+           vCursor.classList.remove('vc-active');
+           if (dragTarget) dragTarget.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cursorX, clientY: cursorY }));
+           dragTarget = null;
+        }
+      }
+
       if (!world.level || world.over || world.busy) {
         for(let i=0; i<btns.length; i++) lastGamepadState[i] = pressed(i);
         return;
@@ -318,11 +323,12 @@
             else if (dy === 1) Game.avanzar(-1);
             else Game.girar(dx);
           } else {
-            let ndx = dx, ndy = dy;
+            let ndx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+            let ndy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
             if (use3D && window.Render3D && Render3D.rot) {
               const th = -Render3D.rot * Math.PI / 2;
-              const rx = Math.round(Math.cos(th) * dx - Math.sin(th) * dy);
-              const ry = Math.round(Math.sin(th) * dx + Math.cos(th) * dy);
+              const rx = Math.round(Math.cos(th) * ndx - Math.sin(th) * ndy);
+              const ry = Math.round(Math.sin(th) * ndx + Math.cos(th) * ndy);
               ndx = rx; ndy = ry;
             }
             Game.tryMove(ndx, ndy);

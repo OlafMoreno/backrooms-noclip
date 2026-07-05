@@ -2,7 +2,8 @@
 @font-face { font-family: 'Press Start 2P'; src: url('../assets/fonts/PressStart2P-Regular.ttf') format('truetype'); font-display: swap; }
 @font-face { font-family: 'VT323'; src: url('../assets/fonts/VT323-Regular.ttf') format('truetype'); font-display: swap; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-*:focus { outline: 2px dashed var(--amarillo); outline-offset: 2px; }
+#virtual-cursor { position: fixed; width: 14px; height: 14px; background: rgba(217,198,110,0.8); border: 2px solid #fff; border-radius: 50%; pointer-events: none; z-index: 999999; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 8px #000; transition: transform 0.05s linear; }
+#virtual-cursor.vc-active { transform: translate(-50%, -50%) scale(0.8); background: #fff; border-color: var(--amarillo); }
 :root {
   --amarillo: #d9c66e;
   --amarillo-osc: #8a7a3d;
