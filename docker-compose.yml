@@ -1,0 +1,30 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: server
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+    working_dir: /app
+    volumes:
+      - ./server:/app/server
+      - ./game:/app/game
+      - ./pipeline:/app/pipeline
+      - ./data:/app/data
+      - /app/server/node_modules
+    develop:
+      watch:
+        - action: sync
+          path: ./server
+          target: /app/server
+          ignore:
+            - node_modules/
+        - action: sync
+          path: ./game
+          target: /app/game
+        - action: rebuild
+          path: ./server/package.json
+    restart: unless-stopped
