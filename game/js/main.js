@@ -1,7 +1,7 @@
 // Arranque: input, bucle de animación y pantalla de título.
 (function () {
   // versión visible del juego (Ajustes); súbela con cada tanda de cambios
-  window.VERSION_JUEGO = 'v23.6';
+  window.VERSION_JUEGO = 'v23.7';
   const world = Game.world;
   world.data = window.GAME_DATA;
 
@@ -205,7 +205,7 @@
   document.addEventListener('keyup', (ev) => teclas.delete(ev.code));
   window.addEventListener('blur', () => {
     teclas.clear();
-    if (world.online && window.Net) Net.setInput(0, 0);
+    if (world.online && window.Net) Net.parar();
   });
 
   let lastStepT = 0; // mantener pulsado = velocidad CONSTANTE (v16)
@@ -311,7 +311,8 @@
   // ---------- bucle de animación (y, online, también el input continuo) ----------
   function lerp(a, b, f) { return a + (b - a) * f; }
 
-  const GIRO_RAD_S = 3.1; // velocidad de giro manteniendo A/D en tercera persona
+  // (la velocidad de giro online vive en Fisica.GIRO_JUGADOR: cliente y
+  // servidor DEBEN integrar el rumbo con la misma constante)
   let lastFrameT = 0;
 
   function loop(t) {
@@ -339,11 +340,9 @@
       sx = Math.sign(sx); sy = Math.sign(sy);
       const tercera = use3D && Render3D.modo === 'tercera';
       if (tercera) {
-        // A/D giran suave; W/S avanzan según el ángulo θ
-        if (sx) Net.setRot((p.rot || 0) + sx * GIRO_RAD_S * dtF);
-        const s = -sy; // W (pantalla arriba) = avanzar
-        if (s) Net.setInput(Math.sin(p.rot || 0) * s, -Math.cos(p.rot || 0) * s);
-        else Net.setInput(0, 0);
+        // v23.7: viaja la INTENCIÓN (avance/giro); el rumbo y la curva los
+        // integran cliente (Net.frame) y servidor con las mismas constantes
+        Net.setMov(-sy, sx); // W/S avance · A/D giro
       } else {
         // 2D / cámara alta: 8 direcciones relativas a la pantalla
         let dx = sx, dy = sy;

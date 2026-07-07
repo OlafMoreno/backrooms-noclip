@@ -113,6 +113,7 @@ wss.on('connection', (ws, req) => {
     }
     if (!jug) return; // todo lo demás exige estar dentro
     if (m.t === 'input') sala.input(jug, m.dx, m.dy);
+    else if (m.t === 'mov') sala.mov(jug, m.av, m.giro);
     else if (m.t === 'rot') sala.girar(jug, m.th);
     else if (m.t === 'accion') sala.accion(jug);
     else if (m.t === 'cruzar') sala.cruzar(jug, m.si);
@@ -192,6 +193,8 @@ function cambiarDeSala(jug, salaVieja, defSalida, opts) {
   jug.x = x; jug.y = y;
   jug.canal = null; jug.escondido = null;
   jug.input = { dx: 0, dy: 0 }; // que la tarjeta del nivel no te vea andando solo
+  jug.mov = null;
+  jug._integradoHasta = null;
   nueva.prepararCaminata(jug);
   const id = jug.id;
   nueva.jugadores.set(id, jug);

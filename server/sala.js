@@ -90,6 +90,7 @@ class Sala {
       esAdmin: false, muteadoHasta: 0,
       ultMov: 0, ultChat: 0, canal: null, ofertaEn: null,
       retorno: null, // puerta personal de vuelta (v23; la pone cambiarDeSala)
+      mov: null,     // intención av/giro (v23.7; excluyente con input vectorial)
     };
     this.prepararCaminata(jug);
     this.enviar(ws, {
@@ -127,36 +128,68 @@ class Sala {
     this.difundir({ t: 'sale', id: jug.id });
   }
 
-  // ---------- movimiento libre (v22): el cliente manda un VECTOR de deseo ----------
-  input(jug, dx, dy) {
-    if (jug.muerto) return;
-    // v23.2: integra el tramo parcial del tick con el input VIEJO antes de
-    // cambiarlo. Sin esto, arrancar/frenar/girar queda cuantizado al tick de
-    // 100 ms (hasta ~0.5 tiles de desvío del camino real del cliente) y la
-    // reconciliación lo interpreta como deriva → temblores en cada maniobra.
-    // OJO (fix v23.4): el tramo arranca en la ÚLTIMA integración de ESTE
-    // jugador, no en el inicio del tick — con varios inputs por tick (girar
-    // andando manda ~uno por frame) se re-integraba el mismo tramo una y otra
-    // vez: velocidad ×3 en el servidor y saltos hacia delante al reconciliar.
-    // Invariante: la suma de dt integrados NUNCA supera el tiempo real.
+  // Integra el tramo parcial del tick con la intención VIEJA antes de
+  // cambiarla (v23.2). Sin esto, arrancar/frenar/girar queda cuantizado al
+  // tick de 100 ms y la reconciliación lo interpreta como deriva (temblores).
+  // OJO (fix v23.4): el tramo arranca en la ÚLTIMA integración de ESTE
+  // jugador, no en el inicio del tick — con varios mensajes por tick se
+  // re-integraba el mismo tramo (velocidad ×3 y saltos hacia delante).
+  // Invariante: la suma de dt integrados NUNCA supera el tiempo real.
+  integrarParcial(jug) {
     const ahora = Date.now();
     const desde = Math.max(this._ultTick || ahora, jug._integradoHasta || 0);
     const dtParcial = (ahora - desde) / 1000;
-    if (dtParcial > 0.004 && (jug.input.dx || jug.input.dy) && !jug.escondido) {
+    const enMarcha = (jug.mov && (jug.mov.av || jug.mov.giro)) ||
+      (jug.input && (jug.input.dx || jug.input.dy));
+    if (dtParcial > 0.004 && enMarcha && !jug.escondido) {
       this.integrar(jug, Math.min(0.25, dtParcial), this._movidosExtra || (this._movidosExtra = []));
       jug._integradoHasta = ahora;
     }
-    jug.input = { dx, dy };
   }
 
-  // integración de un jugador en el tick: física + consecuencias de la posición
+  // ---------- movimiento libre (v22): el cliente manda un VECTOR de deseo ----------
+  input(jug, dx, dy) {
+    if (jug.muerto) return;
+    this.integrarParcial(jug);
+    jug.input = { dx, dy };
+    jug.mov = null;
+  }
+
+  // v23.7 — 3ª persona: INTENCIÓN de movimiento (avance ±1, giro ±1). El
+  // servidor integra el rumbo con la MISMA velocidad angular que el cliente:
+  // ambos trazan la misma curva y el giro deja de generar deriva/saltos
+  // (antes llegaban ~11 fotos/s del vector y aquí se integraba un polígono
+  // de cuerdas que se separaba de la curva real en cada giro).
+  mov(jug, av, giro) {
+    if (jug.muerto) return;
+    this.integrarParcial(jug);
+    jug.mov = { av, giro };
+    jug.input = { dx: 0, dy: 0 };
+  }
+
+  // integración de un jugador en el tick: rumbo + física + consecuencias
   integrar(jug, dt, movidos) {
-    const inp = jug.input;
-    if (!inp || (!inp.dx && !inp.dy) || jug.muerto) return;
+    if (jug.muerto || dt <= 0) return;
+    let giró = false;
+    if (jug.mov && jug.mov.giro) {
+      // rumbo integrado en el servidor: la MISMA curva que predice el cliente
+      jug.rot = Fisica.normAng((jug.rot ?? Math.PI) + jug.mov.giro * Fisica.GIRO_JUGADOR * dt);
+      giró = true;
+    }
+    let inp = jug.input;
+    if (jug.mov) {
+      inp = jug.mov.av
+        ? { dx: Math.sin(jug.rot) * jug.mov.av, dy: -Math.cos(jug.rot) * jug.mov.av }
+        : null;
+    }
+    if (!inp || (!inp.dx && !inp.dy)) {
+      if (giró) movidos.push(jug); // girar sin andar también se difunde (facing)
+      return;
+    }
     if (jug.escondido) this.esconder(jug, false); // moverse te saca del mueble
     const [nx, ny] = Fisica.mover(this.map.grid, jug.x, jug.y, inp.dx, inp.dy, dt, Fisica.VEL_JUGADOR);
     const d = Fisica.dist(jug.x, jug.y, nx, ny);
-    if (d < 0.0005) return;
+    if (d < 0.0005) { if (giró) movidos.push(jug); return; }
     jug.x = nx; jug.y = ny;
     movidos.push(jug);
     // canal de romper: alejarse del punto de inicio lo interrumpe
@@ -632,7 +665,8 @@ class Sala {
     if (movidos.length || (this._entMovidas && this._entMovidas.length)) {
       this.difundir({
         t: 'pos',
-        j: [...new Map(movidos.map((j) => [j.id, j])).values()].map((j) => [j.id, r2(j.x), r2(j.y)]),
+        j: [...new Map(movidos.map((j) => [j.id, j])).values()]
+          .map((j) => [j.id, r2(j.x), r2(j.y), r2(j.rot ?? 0)]),
         e: (this._entMovidas || []).map((e) => [e.uid, r2(e.x), r2(e.y)]),
       });
       this._entMovidas = [];

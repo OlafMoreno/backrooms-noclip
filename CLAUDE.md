@@ -265,7 +265,17 @@ red integra dt REAL (`dtNet` cap 0.6 s en main.js; el clamp visual de 0.1 s hac�
 cualquier microparón del navegador perdiera camino → snap) y la corrección pendiente
 acelera con el tamaño del error. Banda sonora de The Hub:
 `game/assets/sounds/niveles/the-hub.mp3` (assets/sounds/niveles/<id>.* se carga solo, con
-prioridad sobre la receta `sonido` de la ficha). Puerta de RETORNO online (paridad con el modo solo): `cambiarDeSala` busca en el
+prioridad sobre la receta `sonido` de la ficha). **v23.7 — GIRO POR INTENCIÓN (protocolo
+v5)**: girando llegaban ~11 fotos/s del vector y el servidor integraba un polígono de
+cuerdas que se separaba de la curva continua del cliente (deriva sistemática hacia fuera
+en CADA giro → los saltos que reportaba la comunidad). Ahora la 3ª persona envía
+`{t:'mov', av:±1, giro:±1}` SOLO al pulsar/soltar y AMBOS lados integran el rumbo con
+`Fisica.GIRO_JUGADOR` (3.1 rad/s — si se cambia, en fisica.js para los dos): misma curva,
+cero deriva estructural. El lote `pos` lleva `rot` por jugador (r2) — otros.js lo suaviza
+(`rotObj`, 0.35/frame) y el propio jugador converge su rumbo al del servidor SOLO cuando
+no está girando (si no, pelea con el volante). `Net.parar()` = freno universal
+(chat/blur). El input vectorial `{t:'input'}` sigue para ?cam=alta/2D (modos excluyentes:
+jug.mov vs jug.input). Tests: «mov av+giro traza curva legal» y «pos incluye rot». Puerta de RETORNO online (paridad con el modo solo): `cambiarDeSala` busca en el
 destino una salida con `destino === origen` y te hace spawn PEGADO a ella, o crea
 `jug.retorno` — puerta PERSONAL (índice `'R'` en `salidaCerca`/`ofrecer`; el cliente la
 añade a `map.exits` solo en su lado vía `m.retorno`); sin retorno si `esSinRetorno`

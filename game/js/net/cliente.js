@@ -11,6 +11,11 @@
   // v22 — movimiento libre: estado de input y reconciliación
   const input = { dx: 0, dy: 0 };
   let inputEnviado = { dx: 0, dy: 0 };
+  // v23.7 — 3ª persona por INTENCIÓN: av/giro discretos; el rumbo lo integran
+  // cliente y servidor con las mismas constantes (misma curva, cero deriva)
+  const mov = { av: 0, giro: 0 };
+  let movEnviado = { av: 0, giro: 0 };
+  let modoMov = false; // true si el último gesto fue de intención (3ªP)
   let rotEnviada = 0, rotUltEnvio = 0;
   let tileFov = null; // último tile con FOV calculado
   // v23 — rastro de posiciones locales para la reconciliación (ver
@@ -65,7 +70,7 @@
     const params = new URLSearchParams(location.search);
     ws = new WebSocket(urlServidor());
     ws.onopen = () => enviar({
-      t: 'hola', nombre, token: token(), v: 4, // debe coincidir con protocolo.js
+      t: 'hola', nombre, token: token(), v: 5, // debe coincidir con protocolo.js
       nivel: params.get('nivel') || undefined, // puerta de desarrollo (solo MMO_DEV=1)
     });
     ws.onmessage = (ev) => {
@@ -150,9 +155,16 @@
         break;
       case 'pos': // v22: lote de posiciones del tick (jugadores y entidades)
         if (!listo) return;
-        for (const [id, x, y] of m.j || []) {
-          if (id === miId) reconciliar(w, x, y);
-          else Otros.pos(id, x, y);
+        for (const [id, x, y, rot] of m.j || []) {
+          if (id === miId) {
+            reconciliar(w, x, y);
+            // rumbo: converger suave hacia el del servidor SOLO sin girar
+            // (girando, el suyo va con retraso y pelearía con el volante)
+            if (rot !== undefined && !mov.giro && modoMov) {
+              const dr = Fisica.normAng(rot - (w.player.rot || 0));
+              if (Math.abs(dr) > 0.02) w.player.rot = Fisica.normAng((w.player.rot || 0) + dr * 0.25);
+            }
+          } else Otros.pos(id, x, y, rot);
         }
         for (const [uid, x, y] of m.e || []) {
           const e = entidadDe(uid);
@@ -416,9 +428,11 @@
     w.mapaVersion = (w.mapaVersion || 0) + 1;
     historia.length = 0;
     corr.x = 0; corr.y = 0;
-    // el servidor frena tu input al cambiar de sala: el cliente refleja lo mismo
+    // el servidor frena tu intención al cambiar de sala: el cliente refleja lo mismo
     input.dx = 0; input.dy = 0;
     inputEnviado = { dx: 0, dy: 0 };
+    mov.av = 0; mov.giro = 0;
+    movEnviado = { av: 0, giro: 0 };
     const g = w.map.grid;
     w.explored = new Uint8Array(g.w * g.h);
     w.light = new Float32Array(g.w * g.h);
@@ -439,6 +453,7 @@
   // ---------- movimiento libre (v22): input vectorial + predicción local ----------
   let inputUltEnvio = 0;
   function setInput(dx, dy) {
+    if (modoMov) { setMov(0, 0); modoMov = false; } // cambia de modo: frena la intención
     input.dx = Math.max(-1, Math.min(1, dx || 0));
     input.dy = Math.max(-1, Math.min(1, dy || 0));
     // se envía solo al CAMBIAR; los cambios GRANDES (arrancar/parar/invertir)
@@ -450,6 +465,19 @@
       inputEnviado = { dx: input.dx, dy: input.dy };
       inputUltEnvio = ahora;
       enviar({ t: 'input', dx: input.dx, dy: input.dy });
+    }
+  }
+
+  // v23.7 — 3ª persona: solo viaja la INTENCIÓN (avance ±1, giro ±1) y solo
+  // al cambiar (pulsar/soltar una tecla): el servidor integra la misma curva
+  function setMov(av, giro) {
+    modoMov = true;
+    mov.av = Math.sign(av || 0);
+    mov.giro = Math.sign(giro || 0);
+    input.dx = 0; input.dy = 0;
+    if (mov.av !== movEnviado.av || mov.giro !== movEnviado.giro) {
+      movEnviado = { av: mov.av, giro: mov.giro };
+      enviar({ t: 'mov', av: mov.av, giro: mov.giro });
     }
   }
 
@@ -468,8 +496,18 @@
   function frame(dt) {
     const w = Game.world;
     if (!listo) return;
-    if (!w.escondido && (input.dx || input.dy)) {
-      const [nx, ny] = Fisica.mover(w.map.grid, w.player.x, w.player.y, input.dx, input.dy, dt, Fisica.VEL_JUGADOR);
+    // 3ª persona: el rumbo se integra AQUÍ con las mismas constantes que el
+    // servidor — cliente y servidor trazan la misma curva al girar
+    let idx = input.dx, idy = input.dy;
+    if (modoMov) {
+      if (mov.giro) {
+        w.player.rot = Fisica.normAng((w.player.rot || 0) + mov.giro * Fisica.GIRO_JUGADOR * dt);
+      }
+      idx = mov.av ? Math.sin(w.player.rot || 0) * mov.av : 0;
+      idy = mov.av ? -Math.cos(w.player.rot || 0) * mov.av : 0;
+    }
+    if (!w.escondido && (idx || idy)) {
+      const [nx, ny] = Fisica.mover(w.map.grid, w.player.x, w.player.y, idx, idy, dt, Fisica.VEL_JUGADOR);
       w.player.x = nx; w.player.y = ny;
     }
     // corrección pendiente de la reconciliación, repartida por frames
@@ -510,7 +548,8 @@
     let refX = w.player.x, refY = w.player.y;
     // umbral: en movimiento se tolera el jitter del camino; parado, cliente y
     // servidor deben CONVERGER al mismo sitio (umbral fino)
-    const umbral = (input.dx || input.dy) ? 0.4 : 0.15;
+    const enMarcha = modoMov ? (mov.av || mov.giro) : (input.dx || input.dy);
+    const umbral = enMarcha ? 0.4 : 0.15;
     for (let i = historia.length - 1; i >= 0; i--) {
       const h = historia[i];
       const dh = Fisica.dist(h.x, h.y, sx, sy);
@@ -568,9 +607,15 @@
     });
   }
 
+  // frena cualquier movimiento en curso (chat, blur, modales)
+  function parar() {
+    if (modoMov) setMov(0, 0);
+    else setInput(0, 0);
+  }
+
   function abrirChat() {
     if (!inputChat) return;
-    setInput(0, 0); // escribir no es caminar: frena antes de abrir el teclado
+    parar(); // escribir no es caminar: frena antes de abrir el teclado
     inputChat.style.display = 'block';
     inputChat.value = '';
     inputChat.focus();
@@ -587,7 +632,7 @@
   }
 
   window.Net = {
-    iniciar, setInput, setRot, frame,
+    iniciar, setInput, setMov, setRot, parar, frame,
     accion, usar, luzToggle, mochila, admin, tp,
     abrirChat, chatAbierto,
     get activo() { return listo; },

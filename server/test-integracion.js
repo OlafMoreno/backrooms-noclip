@@ -56,7 +56,7 @@ class Cliente {
     return new Promise((res, rej) => {
       this.ws = new WebSocket(`ws://127.0.0.1:${PUERTO}/ws`);
       this.ws.on('open', () => {
-        this.enviar({ t: 'hola', nombre: this.nombre, token: 'arnes-' + this.nombre, v: 4, nivel: this.nivelPedido });
+        this.enviar({ t: 'hola', nombre: this.nombre, token: 'arnes-' + this.nombre, v: 5, nivel: this.nivelPedido });
         res();
       });
       this.ws.on('message', (raw) => {
@@ -192,6 +192,23 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
       const tope = 4.6 * dur * 1.15 + 0.3;
       ok(c.recorrido <= tope,
         `sin speedhack por spam de input (${c.recorrido.toFixed(1)} tiles en ${dur.toFixed(1)} s, tope ${tope.toFixed(1)})`);
+    }
+
+    // --- v23.7: la INTENCIÓN av+giro traza una curva a velocidad legal y el
+    // lote de posiciones trae el rumbo que integra el servidor ---
+    {
+      c.recorrido = 0;
+      const t0 = Date.now();
+      c.enviar({ t: 'mov', av: 1, giro: 1 }); // andar girando = círculo
+      await espera(2000);
+      c.enviar({ t: 'mov', av: 0, giro: 0 });
+      await espera(400);
+      const dur = (Date.now() - t0) / 1000;
+      ok(c.recorrido > 1 && c.recorrido <= 4.6 * dur * 1.15 + 0.3,
+        `mov av+giro traza una curva legal (${c.recorrido.toFixed(1)} tiles en ${dur.toFixed(1)} s)`);
+      const conRot = c.buzon.slice(-60).find((e) =>
+        e.m.t === 'pos' && (e.m.j || []).some((j) => j[0] === c.id && j.length >= 4));
+      ok(!!conRot, 'el lote pos incluye el rumbo integrado por el servidor');
     }
 
     // --- registrar un contenedor con ESPACIO ---
