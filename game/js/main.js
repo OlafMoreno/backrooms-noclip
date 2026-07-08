@@ -1,7 +1,7 @@
 // Arranque: input, bucle de animación y pantalla de título.
 (function () {
   // versión visible del juego (Ajustes); súbela con cada tanda de cambios
-  window.VERSION_JUEGO = 'v24';
+  window.VERSION_JUEGO = 'v25';
   const world = Game.world;
   world.data = window.GAME_DATA;
 
@@ -123,10 +123,46 @@
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
   };
+  // v25: pantalla completa DE VERDAD — el lienzo se re-renderiza a la
+  // resolución del monitor (nada de cuadro de 960×600 sobre fondo negro)
+  function ajustarLienzo() {
+    const fs = !!document.fullscreenElement;
+    const w = fs ? window.innerWidth : 960;
+    const h = fs ? window.innerHeight : 600;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      if (use3D && Render3D.resize) Render3D.resize(w, h);
+    }
+    document.body.classList.toggle('fs', fs);
+  }
   document.addEventListener('fullscreenchange', () => {
     btnFs.textContent = document.fullscreenElement
       ? 'Salir de pantalla completa' : 'Pantalla completa';
+    ajustarLienzo();
   });
+  window.addEventListener('resize', () => { if (document.fullscreenElement) ajustarLienzo(); });
+
+  // ---------- cámara libre con el RATÓN (v25, online 3ªP): mantener y arrastrar ----------
+  {
+    const wrap = document.getElementById('game-wrap');
+    let arrastre = null;
+    wrap.addEventListener('contextmenu', (ev) => ev.preventDefault());
+    wrap.addEventListener('mousedown', (ev) => {
+      if (!world.online || !use3D || Render3D.modo !== 'tercera') return;
+      if (ev.target.closest('button, input, select, #backpack-panel, #log-panel')) return;
+      arrastre = ev.clientX;
+      wrap.classList.add('orbitando');
+    });
+    window.addEventListener('mousemove', (ev) => {
+      if (arrastre === null) return;
+      Render3D.orbita((ev.clientX - arrastre) * 0.0085);
+      arrastre = ev.clientX;
+    });
+    window.addEventListener('mouseup', () => {
+      arrastre = null;
+      wrap.classList.remove('orbitando');
+    });
+  }
 
   // contraseña de guardián: valida contra el servidor (online) y desbloquea
   // el teleport de debug + las barras de salud/comida/bebida/cordura
@@ -139,9 +175,14 @@
     if (admin) world.ui.updateHUD();
   }
   window.onAdminCambia = (si) => {
+    const msg = document.getElementById('admin-msg');
     if (si) {
       world.log('Las Backrooms te reconocen como su guardián.', 'good');
       document.getElementById('admin-clave').value = '';
+      if (msg) msg.textContent = '';
+    } else if (msg) {
+      // feedback EN el panel (el registro pequeño pasaba desapercibido)
+      msg.textContent = '✗ Clave incorrecta (5 fallos = 10 min de bloqueo)';
     }
     actualizarAdminUI();
   };
@@ -340,9 +381,19 @@
       sx = Math.sign(sx); sy = Math.sign(sy);
       const tercera = use3D && Render3D.modo === 'tercera';
       if (tercera) {
-        // v23.7: viaja la INTENCIÓN (avance/giro); el rumbo y la curva los
-        // integran cliente (Net.frame) y servidor con las mismas constantes
-        Net.setMov(-sy, sx); // W/S avance · A/D giro
+        // v25 — estilo Roblox: WASD mueve RELATIVO A LA CÁMARA (adelante/
+        // atrás/izquierda/derecha); la cámara solo la mueve el ratón.
+        const yaw = Render3D.yaw;
+        const Lx = -Math.sin(yaw), Lz = -Math.cos(yaw);  // «adelante» de la cámara
+        const Rx = Math.cos(yaw), Rz = -Math.sin(yaw);   // «derecha» de la cámara
+        const dx = Lx * -sy + Rx * sx;
+        const dy = Lz * -sy + Rz * sx;
+        Net.setInput(dx, dy);
+        if (dx || dy) {
+          p.rot = Math.atan2(dx, -dy); // el personaje ENCARA hacia donde anda
+          if (Math.abs(dy) >= Math.abs(dx)) p.dir = dy > 0 ? 'down' : 'up';
+          else { p.dir = 'side'; p.flip = dx < 0; }
+        }
       } else {
         // 2D / cámara alta: 8 direcciones relativas a la pantalla
         let dx = sx, dy = sy;

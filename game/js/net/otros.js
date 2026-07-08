@@ -133,16 +133,27 @@
   let propio = null; // tu último mensaje: también flota sobre tu cabeza
 
   // posición visual por frame: muestreo del búfer (lerp solo de respaldo);
-  // el rumbo llega a 10 Hz y aquí se suaviza (sin escalones al girar)
+  // el rumbo llega a 20 Hz y aquí se suaviza (sin escalones al girar)
   function frame() {
     const ahora = performance.now();
+    const w = window.Game && Game.world;
     for (const o of porId.values()) {
+      const ax = o.rx, ay = o.ry;
       if (!muestrear(o, ahora)) {
         o.rx += (o.x - o.rx) * 0.22;
         o.ry += (o.y - o.ry) * 0.22;
       }
       if (o.rotObj !== undefined && window.Fisica) {
         o.rot = Fisica.normAng((o.rot || 0) + Fisica.normAng(o.rotObj - (o.rot || 0)) * 0.35);
+      }
+      // pasos de los DEMÁS: sonido local si caminan cerca de ti (v25)
+      if (w && w.player && !o.escondido) {
+        o._paso = (o._paso || 0) + Math.hypot(o.rx - ax, o.ry - ay);
+        if (o._paso > 0.8) {
+          o._paso = 0;
+          if (window.Sfx && Math.hypot(o.rx - w.player.rx, o.ry - w.player.ry) < 8)
+            Sfx.play('paso', w.level?.estilo?.suelo);
+        }
       }
     }
   }

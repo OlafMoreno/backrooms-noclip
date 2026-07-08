@@ -19,7 +19,7 @@
 //   {t:'pong'}
 'use strict';
 
-const VERSION = 6; // v24: el movimiento es del CLIENTE y el servidor VALIDA ({t:'p'})
+const VERSION = 7; // v25: loot/cajas/dados client-side, cámara libre — el server solo valida
 const MAX_MSG = 512;          // bytes por mensaje entrante
 const MAX_CHAT = 120;         // caracteres de un chat
 const COOLDOWN_MOVER = 165;   // ms entre pasos (el cliente usa 170: margen de jitter)
@@ -69,6 +69,11 @@ function leer(raw) {
       if (m.mano !== undefined) { out.mano = m.mano | 0; if (out.mano !== 0 && out.mano !== 1) return null; }
       if (m.tipo !== undefined) { if (!['cara', 'cuerpo', 'pies'].includes(m.tipo)) return null; out.tipo = m.tipo; }
       return out;
+    }
+    case 'loot': { // v25: el botín es INDIVIDUAL y se resuelve en el cliente;
+      // aquí solo se pide el alta en el inventario (el server pone cadencia y hueco)
+      if (typeof m.id !== 'string' || m.id.length > 32) return null;
+      return { t: 'loot', id: m.id };
     }
     case 'admin': { // contraseña de guardián desde Ajustes (responde {t:'admin', si})
       if (typeof m.clave !== 'string' || m.clave.length > 64) return null;

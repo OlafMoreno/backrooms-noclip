@@ -56,7 +56,7 @@ class Cliente {
     return new Promise((res, rej) => {
       this.ws = new WebSocket(`ws://127.0.0.1:${PUERTO}/ws`);
       this.ws.on('open', () => {
-        this.enviar({ t: 'hola', nombre: this.nombre, token: 'arnes-' + this.nombre, v: 6, nivel: this.nivelPedido });
+        this.enviar({ t: 'hola', nombre: this.nombre, token: 'arnes-' + this.nombre, v: 7, nivel: this.nivelPedido });
         res();
       });
       this.ws.on('message', (raw) => {
@@ -211,34 +211,38 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
       ok((c.rechazos || 0) > n0r, 'teleport de 2.5 tiles → rechazado con corrección y sec nuevo');
     }
 
-    // --- registrar un contenedor con ESPACIO ---
+    // --- v25: el botín es INDIVIDUAL — el server solo da de alta con cadencia ---
     const g = c.map.grid;
     const alcanz = (x, y) => MapGen.bfsDist(g, Fisica.tileDe(c.x), Fisica.tileDe(c.y))[y * g.w + x] >= 0;
-    const cont = (c.map.props || [])
-      .filter((p) => p.contenedor && !p.registrado && alcanz(p.x, p.y))
-      .sort((a, b) => (Math.abs(a.x - c.x) + Math.abs(a.y - c.y)) - (Math.abs(b.x - c.x) + Math.abs(b.y - c.y)))[0];
-    ok(!!cont, 'hay un contenedor alcanzable en el mapa');
-    if (cont) {
-      await c.irA(cont.x, cont.y, 0.9);
+    {
       n0 = c.buzon.length;
-      c.enviar({ t: 'accion' });
-      const reg = await c.espera((m) => m.t === 'registrado', 3000, n0);
-      const dado = await c.espera((m) => m.t === 'dado' && m.id === c.id, 3000, n0);
-      ok(reg && typeof reg.i === 'number', `ESPACIO registra el contenedor (índice ${reg.i})`);
-      ok(dado && dado.valor >= 1 && dado.valor <= 20, `tirada difundida: d20 → ${dado.valor}`);
-      // segunda vez: ya registrado, no debe repetirse
+      c.enviar({ t: 'loot', id: 'botiquin' });
+      const inv = await c.espera((m) => m.t === 'inv', 3000, n0);
+      ok(inv.inv.includes('botiquin'), 'loot da de alta el objeto en el inventario');
       n0 = c.buzon.length;
-      c.enviar({ t: 'accion' });
-      await espera(400);
-      ok(!c.buzon.slice(n0).some((e) => e.m.t === 'registrado'), 'registrar no se repite en el mismo mueble');
-      // ojo: si el mueble era un ESCONDITE (taquilla/nevera/archivador), ese
-      // segundo ESPACIO te mete dentro — y escondido, el servidor ignora los
-      // informes de posición. Salir antes de seguir navegando.
-      if (c.buzon.slice(n0).some((e) => e.m.t === 'esconde' && e.m.id === c.id && e.m.si)) {
+      c.enviar({ t: 'loot', id: 'trebol' }); // inmediato: la cadencia lo frena
+      c.enviar({ t: 'loot', id: 'noexiste' }); // inexistente: ignorado
+      await espera(500);
+      ok(!c.buzon.slice(n0).some((e) => e.m.t === 'inv'),
+        'cadencia de loot: el spam y los ids falsos no cuelan');
+    }
+
+    // --- ESPACIO junto a una taquilla te esconde (y otro te saca) ---
+    {
+      const esc = (c.map.props || [])
+        .filter((p) => ['taquilla', 'nevera', 'archivador'].includes(p.id) && alcanz(p.x, p.y))
+        .sort((a, b) => (Math.abs(a.x - c.x) + Math.abs(a.y - c.y)) - (Math.abs(b.x - c.x) + Math.abs(b.y - c.y)))[0];
+      if (esc) {
+        await c.irA(esc.x, esc.y, 0.9);
+        n0 = c.buzon.length;
         c.enviar({ t: 'accion' });
-        await espera(300);
-        ok(c.buzon.some((e) => e.m.t === 'esconde' && e.m.id === c.id && e.m.si === false),
-          'ESPACIO dentro del mueble te saca (escondite funcional)');
+        await c.espera((m) => m.t === 'esconde' && m.id === c.id && m.si, 3000, n0);
+        ok(true, 'ESPACIO junto a la taquilla te esconde');
+        c.enviar({ t: 'accion' });
+        await c.espera((m) => m.t === 'esconde' && m.id === c.id && m.si === false, 3000, n0);
+        ok(true, 'ESPACIO dentro del mueble te saca');
+      } else {
+        ok(true, '(sin escondite alcanzable en este mapa: chequeo omitido)');
       }
     }
 

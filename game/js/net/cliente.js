@@ -22,6 +22,7 @@
   let rtt = 100;         // ms ida y vuelta (medido con ping/pong; telemetría)
   let pingTimer = null;
   let ultimoError = null; // último rechazo del servidor (lo muestra el título)
+  let pasoAcum = 0;       // distancia andada desde el último sonido de paso
   const r2 = (v) => Math.round(v * 100) / 100;
 
   // fuerza la recarga real de los scripts (sin caché) y reinicia la página.
@@ -67,7 +68,7 @@
     const params = new URLSearchParams(location.search);
     ws = new WebSocket(urlServidor());
     ws.onopen = () => enviar({
-      t: 'hola', nombre, token: token(), v: 6, // debe coincidir con protocolo.js
+      t: 'hola', nombre, token: token(), v: 7, // debe coincidir con protocolo.js
       nivel: params.get('nivel') || undefined, // puerta de desarrollo (solo MMO_DEV=1)
     });
     ws.onmessage = (ev) => {
@@ -229,8 +230,8 @@
         if (document.getElementById('backpack-panel').style.display !== 'none')
           w.ui.toggleBackpack(true); // repintar el panel abierto
         break;
-      case 'itemSuelto': {
-        w.map.items[m.idx] = { x: m.x, y: m.y, id: m.id, taken: false };
+      case 'itemSuelto': { // tu objeto tirado/arrojado (mundo de botín individual)
+        w.map.items.push({ x: m.x, y: m.y, id: m.id, taken: false, recien: !!m.recien });
         w.itemsVersion = (w.itemsVersion || 0) + 1;
         break;
       }
@@ -246,17 +247,6 @@
         break;
 
       // ---------- objetos y salidas ----------
-      case 'itemCogido': {
-        const it = w.map.items[m.idx];
-        if (it) it.taken = true;
-        w.itemsVersion = (w.itemsVersion || 0) + 1;
-        if (m.por === miId) {
-          const def = w.data.objects[m.id];
-          w.log(`Recoges: ${def ? def.nombre : m.id}.`, 'good');
-          if (window.Sfx) Sfx.play('recoger');
-        }
-        break;
-      }
       case 'dado': {
         const p = posDe(m.id);
         if (p && window.Effects)
@@ -303,13 +293,6 @@
           if (window.Sfx) Sfx.play('ui');
         } else Otros.luz(m.id, m.si);
         break;
-      case 'registrado': { // un contenedor de la sala queda registrado
-        const pr = (w.map.props || [])[m.i];
-        if (!pr) return;
-        pr.registrado = true;
-        if (cerca(w, pr.x, pr.y, 10) && window.Sfx) Sfx.play('registrar');
-        break;
-      }
       case 'admin': // respuesta a la contraseña de guardián (Ajustes)
         w.esAdmin = !!m.si;
         if (window.onAdminCambia) window.onAdminCambia(w.esAdmin);
@@ -393,8 +376,15 @@
         },
       });
     }
-    for (const i of m.itemsTomados || []) if (w.map.items[i]) w.map.items[i].taken = true;
     for (const i of m.abiertas || []) if (w.map.exits[i]) w.map.exits[i].def._abierta = true;
+    // v25: botín INDIVIDUAL — las cajas que TÚ ya registraste en esta sala
+    // (persistido en el navegador: reconectar no rellena los muebles)
+    w._semillaSala = m.semilla;
+    try {
+      const hechas = new Set(JSON.parse(localStorage.getItem('mmo-cajas::' + m.semilla) || '[]'));
+      for (const pr of w.map.props || [])
+        if (pr.contenedor && hechas.has(pr.x + ',' + pr.y)) pr.registrado = true;
+    } catch (e) {}
     w.entities = (m.ents || []).map((e) => ({
       uid: e.uid, id: e.id, def: w.data.entities[e.id],
       x: e.x, y: e.y, rx: e.x, ry: e.y,
@@ -474,7 +464,14 @@
     }
     if (!w.escondido && (idx || idy)) {
       const [nx, ny] = Fisica.mover(w.map.grid, w.player.x, w.player.y, idx, idy, dt, Fisica.VEL_JUGADOR);
+      // pasos: sonido 100% local, uno cada ~0.75 tiles recorridos
+      pasoAcum += Fisica.dist(w.player.x, w.player.y, nx, ny);
+      if (pasoAcum > 0.75) {
+        pasoAcum = 0;
+        if (window.Sfx) Sfx.play('paso', w.level?.estilo?.suelo);
+      }
       w.player.x = nx; w.player.y = ny;
+      recogerSuelo(w); // botín del suelo: proximidad local
     }
     const tx = Fisica.tileDe(w.player.x), ty = Fisica.tileDe(w.player.y);
     if (!tileFov || tileFov[0] !== tx || tileFov[1] !== ty) {
@@ -492,8 +489,77 @@
     }
   }
 
+  // ---------- botín INDIVIDUAL (v25): cajas, dado y suelo en TU navegador ----------
+  const POOL_CAJAS = ['agua_almendras', 'agua_almendras', 'botiquin', 'amuleto', 'linterna',
+    'chaqueta', 'mascara_gas', 'botas_reforzadas', 'tuberia', 'fuego_griego', 'guante_paralisis', 'trebol'];
+
+  function guardarCaja(w, pr) {
+    try {
+      const k = 'mmo-cajas::' + (w._semillaSala || '');
+      const lista = JSON.parse(localStorage.getItem(k) || '[]');
+      lista.push(pr.x + ',' + pr.y);
+      localStorage.setItem(k, JSON.stringify(lista.slice(-400)));
+    } catch (e) {}
+  }
+
+  // ESPACIO sobre un contenedor sin registrar: TODO local (dado, botín,
+  // sonido); al servidor solo viaja el alta del objeto encontrado
+  function registrarLocal(w) {
+    const pr = (w.map.props || []).find((p) => p.contenedor && !p.registrado &&
+      Fisica.dist(p.x, p.y, w.player.x, w.player.y) <= 1.2);
+    if (!pr) return false;
+    pr.registrado = true;
+    guardarCaja(w, pr);
+    if (window.Sfx) Sfx.play('registrar');
+    w.rollDice('Registras el contenedor…', (d) => {
+      if (d >= 14) {
+        const id = POOL_CAJAS[Math.min(POOL_CAJAS.length - 1,
+          Math.floor((d - 14) / 7 * POOL_CAJAS.length + Math.floor(Math.random() * 3)))];
+        if ((w.player.inv || []).length >= 6) {
+          w.log(`Dado: ${d}. Hay algo útil… pero no te cabe nada más.`, 'event');
+        } else {
+          w.log(`Dado: ${d}. Encuentras: ${w.data.objects[id].nombre}.`, 'good');
+          if (window.Effects) Effects.flash(w.player.x, w.player.y, '#ffe9a0');
+          enviar({ t: 'loot', id }); // el server valida cadencia y hueco
+        }
+      } else if (d >= 7) {
+        w.log(`Dado: ${d}. Vacío. Solo polvo y papel amarillento.`, 'event');
+      } else {
+        w.log(`Dado: ${d}. Algo se escurre entre tus dedos. Retrocedes de golpe.`, 'danger');
+      }
+    });
+    return true;
+  }
+
+  // objetos del suelo: recogida local por proximidad (cada errante ve y
+  // recoge SU copia del mundo — nada de peleas por la tubería)
+  let sueloT = 0;
+  function recogerSuelo(w) {
+    const ahora = performance.now();
+    if (ahora - sueloT < 150) return;
+    sueloT = ahora;
+    for (const it of w.map.items || []) {
+      if (it.taken) continue;
+      const d = Fisica.dist(it.x, it.y, w.player.x, w.player.y);
+      if (it.recien) { if (d > 0.8) it.recien = false; continue; }
+      if (d >= 0.5) continue;
+      if ((w.player.inv || []).length >= 6) continue; // sin hueco: se queda
+      it.taken = true;
+      w.itemsVersion = (w.itemsVersion || 0) + 1;
+      const def = w.data.objects[it.id];
+      w.log(`Recoges: ${def ? def.nombre : it.id}.`, 'good');
+      if (window.Sfx) Sfx.play('recoger');
+      enviar({ t: 'loot', id: it.id });
+      break; // uno por vez (la cadencia del server manda)
+    }
+  }
+
   // ---------- acciones ----------
-  function accion() { enviar({ t: 'accion' }); }           // ESPACIO
+  function accion() { // ESPACIO contextual
+    const w = Game.world;
+    if (!w.escondido && registrarLocal(w)) return; // cajas: asunto tuyo
+    enviar({ t: 'accion' });                       // esconderse/romper/salidas: del server
+  }
   function usar(mano) { enviar({ t: 'usar', mano }); }     // Q/E
   function mochila(que, datos) { enviar({ t: 'mochila', que, ...datos }); }
 

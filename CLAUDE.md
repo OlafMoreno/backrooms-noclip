@@ -281,9 +281,26 @@ propio se ignora. El servidor ya NO integra jugadores (sí entidades); tick a 20
 Escondido = el servidor ignora informes (salir con ESPACIO). bots.js genera el mapa desde
 la semilla y camina con la física real (30 bots → 0 rechazos: sin falsos positivos).
 Tests del validador en test-integracion.js: speedhack ~23 t/s → 0.9 tiles aceptados,
-teleport 2.5 → rechazo+sec, escondite funcional. OJO arneses: tras registrar una taquilla,
-el 2º ESPACIO te ESCONDE (los informes se ignoran) — salir antes de navegar; y para
-re-ofertar una salida hay que alejarse >1 tile de TODAS (histéresis). Puerta de RETORNO online (paridad con el modo solo): `cambiarDeSala` busca en el
+teleport 2.5 → rechazo+sec, escondite funcional. OJO arneses: ESPACIO junto a una taquilla
+te ESCONDE (los informes se ignoran) — salir antes de navegar; y para re-ofertar una
+salida hay que alejarse >1 tile de TODAS (histéresis).
+
+**v25 — mundo de botín INDIVIDUAL + cámara libre (protocolo v7)**: cajas/dados/objetos del
+suelo se resuelven EN EL CLIENTE (Net.accion→registrarLocal: dado con rollDice, pool
+POOL_CAJAS, persistencia localStorage `mmo-cajas::<semilla>`; recogerSuelo por proximidad
+local; tirar/arrojar → 'itemSuelto' PERSONAL) — al servidor solo viaja `{t:'loot', id}` y
+sala.loot() valida cadencia 1.2s + hueco + id∈DATA.objects. Fuera del server: registrarCont,
+itemsTomados, itemCogido, dado difundido (el de romper va solo al actor). Detección de
+entidades ×1.7 (OLFATO en entidades.js, cap 16, contacto sin escalar) y rastro 4.2s.
+CÁMARA LIBRE estilo Roblox (online 3ªP): WASD mueve RELATIVO A LA CÁMARA (main.js:
+adelante=(-sin yaw,-cos yaw), derecha=(cos yaw,-sin yaw); p.rot=atan2 del movimiento),
+ratón mantener+arrastrar orbita (Render3D.orbita/yaw, yawLibre; colisión de cámara ya
+existía); el sprite propio muestra la cara según rot−(−camYaw). Pasos SONORO local
+(pasoAcum 0.75 en cliente.js; otros a <8 tiles en otros.js). Pantalla completa REAL:
+ajustarLienzo() re-renderiza a resolución del monitor (Render3D.resize actualiza W/H que
+usan proj/overlay). Feedback de admin EN el panel (#admin-msg). Al tocar el HUD/red,
+recordar: el server ya solo conoce posición validada, inventario, salud, salidas, grietas,
+escondites, chat y entidades. Puerta de RETORNO online (paridad con el modo solo): `cambiarDeSala` busca en el
 destino una salida con `destino === origen` y te hace spawn PEGADO a ella, o crea
 `jug.retorno` — puerta PERSONAL (índice `'R'` en `salidaCerca`/`ofrecer`; el cliente la
 añade a `map.exits` solo en su lado vía `m.retorno`); sin retorno si `esSinRetorno`

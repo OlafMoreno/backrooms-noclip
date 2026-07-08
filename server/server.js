@@ -113,6 +113,7 @@ wss.on('connection', (ws, req) => {
     }
     if (!jug) return; // todo lo demás exige estar dentro
     if (m.t === 'p') sala.posicion(jug, m);
+    else if (m.t === 'loot') sala.loot(jug, m.id);
     else if (m.t === 'accion') sala.accion(jug);
     else if (m.t === 'cruzar') sala.cruzar(jug, m.si);
     else if (m.t === 'usar') sala.usar(jug, m.mano);

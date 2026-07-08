@@ -82,13 +82,13 @@ class Sala {
     }));
   }
 
-  // estado de sala que el cliente no puede derivar de la semilla
+  // estado de sala que el cliente no puede derivar de la semilla (v25: los
+  // objetos del suelo ya no viajan — el botín es individual de cada cliente)
   estadoDinamico() {
     return {
       ents: this.entidades.map((e) => ({
         uid: e.uid, id: e.id, x: e.x, y: e.y, viva: e.viva, revelada: e.revelada,
       })),
-      itemsTomados: this.map.items.map((it, i) => it.taken ? i : -1).filter((i) => i >= 0),
       abiertas: this.map.exits.map((ex, i) => ex.def._abierta ? i : -1).filter((i) => i >= 0),
     };
   }
@@ -197,28 +197,10 @@ class Sala {
     }
   }
 
-  // consecuencias de la posición (v22, por PROXIMIDAD): recoger a <0.5,
-  // ofertar salida a <0.6 (histéresis: se rearma al alejarse >1.0)
+  // consecuencias de la posición (v22, por PROXIMIDAD): ofertar salida a
+  // <0.6 (histéresis: se rearma al alejarse >1.0). v25: los objetos del suelo
+  // ya NO se gestionan aquí — el botín es individual y lo recoge el cliente.
   proximidad(jug) {
-    for (const it of this.map.items)
-      if (it.recien === jug.id && Fisica.dist(it.x, it.y, jug.x, jug.y) > 0.8) delete it.recien;
-    const i = this.map.items.findIndex(
-      (it) => !it.taken && it.recien !== jug.id && Fisica.dist(it.x, it.y, jug.x, jug.y) < 0.5
-    );
-    if (i >= 0 && jug.inv.length < 6) {
-      const it = this.map.items[i];
-      it.taken = true;
-      delete it.recien;
-      jug.inv.push(it.id);
-      // tubería o linterna a una mano libre: lista para usar
-      const m = jug.manos.indexOf(null);
-      if (m >= 0 && (it.id === 'tuberia' || it.id === 'linterna')) {
-        jug.manos[m] = it.id;
-        jug.inv.pop();
-      }
-      this.difundir({ t: 'itemCogido', idx: i, por: jug.id, id: it.id });
-      this.enviarInv(jug);
-    }
     const s = this.salidaCerca(jug, 0.6);
     if (s && jug.ofertaEn !== s.i) this.ofrecer(jug, s);
     else if (!s && jug.ofertaEn !== null && !this.salidaCerca(jug, 1.0)) jug.ofertaEn = null;
@@ -259,68 +241,50 @@ class Sala {
   }
 
   // ---------- ESPACIO contextual (v22: todo por proximidad) ----------
+  // v25: los CONTENEDORES ya no pasan por aquí — registrar/dado/botín es
+  // individual y vive en el cliente (Net.accion lo intercepta); al servidor
+  // solo llega {t:'loot'} para dar de alta el objeto encontrado.
   accion(jug) {
     if (jug.muerto || jug.canal) return;
     // 1) escondite: salir de él
     if (jug.escondido) { this.esconder(jug, false); return; }
-    // 2) contenedor SIN registrar cerca: registrarlo (v23 — como el modo solo)
-    const iCont = (this.map.props || []).findIndex(
-      (p) => p.contenedor && !p.registrado && Fisica.dist(p.x, p.y, jug.x, jug.y) <= 1.2
-    );
-    if (iCont >= 0) { this.registrarCont(jug, iCont); return; }
     const prop = (this.map.props || []).find(
-      (p) => ESCONDITES.has(p.id) && p.registrado && Fisica.dist(p.x, p.y, jug.x, jug.y) <= 1.2
+      (p) => ESCONDITES.has(p.id) && Fisica.dist(p.x, p.y, jug.x, jug.y) <= 1.2
     );
-    // 3) salida con mecánica de romper (a ≤1.0)
+    // 2) salida con mecánica de romper (a ≤1.0)
     const s = this.salidaCerca(jug, 1.0);
     if (s && (s.ex.def._mec === 'romper' || s.ex.def._mec === 'romper_suelo') && !s.ex.def._abierta) {
       this.iniciarRomper(jug, s);
       return;
     }
-    // 4) salida normal: reofrecer
+    // 3) salida normal: reofrecer
     if (s) { this.ofrecer(jug, s); return; }
     if (prop) { this.esconder(jug, true, prop); return; }
     this.enviar(jug.ws, { t: 'aviso', txt: 'No hay nada con lo que interactuar aquí.' });
   }
 
-  // ---------- registrar contenedores (v23): dado autoritativo, botín compartido ----------
-  registrarCont(jug, i) {
-    const prop = this.map.props[i];
-    prop.registrado = true;
-    this.difundir({ t: 'registrado', i }); // todos ven que ese mueble ya está abierto
-    this.hacerRuido(jug.x, jug.y, 10);     // registrar HACE RUIDO (como en el modo solo)
-    const d = this.rng.int(1, 20);
-    this.difundir({ t: 'dado', id: jug.id, valor: d, exito: d >= 14 });
-    if (d >= 14) {
-      const pool = ['agua_almendras', 'agua_almendras', 'botiquin', 'amuleto', 'linterna', 'chaqueta', 'mascara_gas', 'botas_reforzadas', 'tuberia', 'fuego_griego', 'guante_paralisis', 'trebol'];
-      const id = pool[Math.min(pool.length - 1, Math.floor((d - 14) / 7 * pool.length + this.rng.int(0, 2)))];
-      if (jug.inv.length >= 6) {
-        this.enviar(jug.ws, { t: 'aviso', txt: 'Hay algo útil… pero no te cabe nada más.' });
-      } else {
-        jug.inv.push(id);
-        this.enviarInv(jug);
-        const def = DATA.objects[id];
-        this.enviar(jug.ws, { t: 'aviso', txt: `Encuentras: ${def ? def.nombre : id}.` });
-      }
-    } else if (d >= 7) {
-      this.enviar(jug.ws, { t: 'aviso', txt: 'Vacío. Solo polvo y papel amarillento.' });
-    } else if (d >= 2) {
-      this.enviar(jug.ws, { t: 'aviso', txt: 'Algo se escurre entre tus dedos. Retrocedes de golpe.' });
-    } else {
-      // pifia: el estruendo pone a cazar a la entidad más cercana
-      this.enviar(jug.ws, { t: 'aviso', txt: 'El ruido ha despertado algo en la oscuridad…' });
-      this.hacerRuido(jug.x, jug.y, 14);
-      let best = null, bestD = Infinity;
-      for (const e of this.entidades) {
-        if (!e.viva) continue;
-        const dd = Math.abs(e.x - jug.x) + Math.abs(e.y - jug.y);
-        if (dd < bestD) { bestD = dd; best = e; }
-      }
-      if (best) {
-        best.estado = 'caza';
-        if (!best.revelada) { best.revelada = true; this.difundir({ t: 'entRevela', uid: best.uid }); }
-      }
+  // ---------- alta de botín (v25): el cliente resolvió su dado individual ----------
+  // El servidor solo garantiza lo importante: cadencia (nada de granjas de
+  // objetos por mensaje) y hueco en la mochila. El objeto debe existir.
+  loot(jug, id) {
+    if (jug.muerto) return;
+    const def = DATA.objects[id];
+    if (!def) return;
+    const ahora = Date.now();
+    if (ahora - (jug._ultLoot || 0) < 1200) return; // cadencia máxima de botín
+    if (jug.inv.length >= 6) {
+      this.enviar(jug.ws, { t: 'aviso', txt: 'No te cabe nada más en la mochila.' });
+      return;
     }
+    jug._ultLoot = ahora;
+    jug.inv.push(id);
+    // tubería o linterna a una mano libre: lista para usar
+    const m = jug.manos.indexOf(null);
+    if (m >= 0 && (id === 'tuberia' || id === 'linterna')) {
+      jug.manos[m] = id;
+      jug.inv.pop();
+    }
+    this.enviarInv(jug);
   }
 
   esconder(jug, si, prop) {
@@ -360,7 +324,8 @@ class Sala {
     const esSuelo = ex.def._mec === 'romper_suelo';
     const umbral = c.herramienta ? 7 : (esSuelo ? 11 : 12);
     const exito = d >= umbral;
-    this.difundir({ t: 'dado', id: jug.id, valor: d, exito });
+    // v25: el dado es asunto TUYO (los demás ya ven el derrumbe si abre)
+    this.enviar(jug.ws, { t: 'dado', id: jug.id, valor: d, exito });
     this.enviar(jug.ws, { t: 'canalFin', ok: true });
     if (exito) {
       ex.def._abierta = true;
@@ -513,10 +478,9 @@ class Sala {
           }
           this.hacerRuido(tx, ty, 12);
         }
-        const it = { x: tx, y: ty, id, taken: false };
-        if (m.que === 'tirar') it.recien = jug.id;
-        this.map.items.push(it);
-        this.difundir({ t: 'itemSuelto', idx: this.map.items.length - 1, x: tx, y: ty, id });
+        // v25: el objeto en el suelo es TUYO (mundo de botín individual):
+        // solo tu cliente lo dibuja y lo puede volver a recoger
+        this.enviar(jug.ws, { t: 'itemSuelto', x: tx, y: ty, id, recien: m.que === 'tirar' });
         break;
       }
       case 'ponerEquipo': {
