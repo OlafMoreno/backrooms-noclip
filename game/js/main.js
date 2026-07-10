@@ -1,7 +1,7 @@
 // Arranque: input, bucle de animación y pantalla de título.
 (function () {
   // versión visible del juego (Ajustes); súbela con cada tanda de cambios
-  window.VERSION_JUEGO = 'v27.1';
+  window.VERSION_JUEGO = 'v27.2';
   const world = Game.world;
   world.data = window.GAME_DATA;
 
@@ -259,7 +259,7 @@
     wrap.addEventListener('mousedown', (ev) => {
       if (!world.online || !use3D || Render3D.modo !== 'tercera') return;
       if (world.busy) return;
-      if (ev.target.closest('button, input, select, #backpack-panel, #log-panel, #journal-panel, #codex-panel, #sound-menu, .choice-modal, .modal-box')) return;
+      if (ev.target.closest('button, input, select, #backpack-panel, #log-panel, #journal-panel, #codex-panel, #changelog-panel, #sound-menu, .choice-modal, .modal-box')) return;
       const modo = window.OPTS.camaraModo || 'libre';
       if (modo === 'libre') {
         if (ev.button !== 0) return; // clic izquierdo engancha el puntero
@@ -539,6 +539,7 @@
   function isUIOpen() {
     if (document.getElementById('backpack-panel')?.style.display !== 'none') return true;
     if (document.getElementById('codex-panel')?.style.display !== 'none') return true;
+    if (document.getElementById('changelog-panel')?.style.display !== 'none') return true;
     if (document.getElementById('journal-panel')?.style.display !== 'none') return true;
     if (document.getElementById('sound-menu')?.style.display !== 'none') return true;
     if (document.getElementById('gamepad-menu')?.style.display !== 'none') return true;
@@ -1385,6 +1386,7 @@
     ev.target.value = '';
   };
   $id('btn-codex').onclick = () => world.ui.toggleCodex(true);
+  $id('btn-changelog').onclick = () => world.ui.toggleChangelog(true);
 
   $id('btn-start').onclick = () => {
     conectarAlServidor($id('btn-start'));

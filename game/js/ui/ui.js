@@ -896,6 +896,21 @@
   }
   $('btn-codex-close').onclick = () => toggleCodex(false);
 
+  // ---------- changelog ----------
+  let changelogVisible = false;
+  function toggleChangelog(force) {
+    changelogVisible = force !== undefined ? force : !changelogVisible;
+    if (changelogVisible && document.pointerLockElement) document.exitPointerLock();
+    $('changelog-panel').style.display = changelogVisible ? 'flex' : 'none';
+    if (changelogVisible && window.Changelog) Changelog.render($('changelog-list'));
+    if (world.level && !world.over) {
+      if (changelogVisible) world.busy = true;
+      else if ($('exit-modal').style.display === 'none' && $('dice-overlay').style.display === 'none')
+        world.busy = false;
+    }
+  }
+  $('btn-changelog-close').onclick = () => toggleChangelog(false);
+
   // ---------- fin ----------
   function showEnd(victoria, causa) {
     if (!world._muerteSmiler) document.body.classList.remove('smiler-death');
@@ -915,7 +930,7 @@
   world.ui = {
     log, updateHUD, flashDamage, showLevelCard, showDice,
     showExitModal, showLevelPicker, showChoice, toggleJournal, showEnd, show, toggleCodex,
-    toggleBackpack, toggleLog, showInstintos, pulsarMano,
+    toggleBackpack, toggleLog, showInstintos, pulsarMano, toggleChangelog,
     get flashT() { return flashT; },
   };
 })();

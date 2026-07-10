@@ -433,7 +433,7 @@ body.fs #game-canvas, body.fs #gl-canvas { border: none; box-shadow: none; }
 }
 
 /* ---------- códice ---------- */
-#codex-panel { position: fixed; inset: 0; background: rgba(3,3,2,.88);
+#codex-panel, #changelog-panel { position: fixed; inset: 0; background: rgba(3,3,2,.88);
   display: flex; align-items: center; justify-content: center; z-index: 30; }
 .codex-box { width: min(720px, 94vw); max-height: 88vh; overflow: auto;
   border: 8px solid transparent; border-image: var(--marco) 8 fill stretch;
@@ -455,6 +455,9 @@ details.cdx[open] > summary::before { transform: rotate(90deg); }
 details.cdx > summary:hover { background: #14120c; }
 .cdx-n { margin-left: auto; color: var(--gris); font-size: 14px; letter-spacing: 0; }
 details.cdx > div, details.cdx > ol { padding: 6px 14px 12px; }
+.changelog-ul { padding: 6px 14px 12px 30px; margin: 0; }
+.changelog-ul li { color: #cfc8b0; font-size: 14.5px; line-height: 1.55; margin-bottom: 4px; }
+.changelog-ul li::marker { color: var(--amarillo-osc); }
 .cdx-nivel { border: 1px solid var(--borde); border-left: 4px solid #888;
   margin-bottom: 4px; background: #0f0e0a; }
 .cdx-nivel > summary { list-style: none; cursor: pointer; padding: 6px 10px;
