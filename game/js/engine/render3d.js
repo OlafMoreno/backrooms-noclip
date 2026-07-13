@@ -1371,7 +1371,7 @@
     if (CAM_MODO === 'tercera') {
       if (world.online) {
         // v25: cámara libre — el sprite muestra la cara que toque
-        const rel = ((Math.round(((p.rot || 0) - (-camYaw)) / (Math.PI / 2)) % 4) + 4) % 4;
+        const rel = Otros.dir4((p.rot || 0) + camYaw);
         if (rel === 0) sid = 'player_up';
         else if (rel === 2) sid = 'player_down';
         else { sid = 'player_side'; sflip = rel === 3; }
@@ -1789,7 +1789,10 @@
 
   function project(wx, wy) {
     const v = new THREE.Vector3(wx + 0.5, 0.8, wy + 0.5).project(camera);
-    return [(v.x * 0.5 + 0.5) * W, (-v.y * 0.5 + 0.5) * H];
+    // v.z > 1 tras project(): el punto queda detrás de la cámara (la
+    // división de perspectiva por w negativa lo puede devolver dentro del
+    // rango de pantalla en vez de fuera) — quien llama debe ignorarlo
+    return [(v.x * 0.5 + 0.5) * W, (-v.y * 0.5 + 0.5) * H, v.z > 1];
   }
 
   function drawOverlay(world, t) {

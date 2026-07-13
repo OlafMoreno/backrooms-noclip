@@ -60,7 +60,7 @@
     if (changelogPanel && changelogPanel.style.display !== 'none') {
       ev.preventDefault();
       ev.stopPropagation();
-      if (window.world && world.ui && typeof world.ui.toggleChangelog === 'function') {
+      if (world.ui && typeof world.ui.toggleChangelog === 'function') {
         world.ui.toggleChangelog(false);
       } else {
         changelogPanel.style.display = 'none';
@@ -73,7 +73,7 @@
     if (codexPanel && codexPanel.style.display !== 'none') {
       ev.preventDefault();
       ev.stopPropagation();
-      if (window.world && world.ui && typeof world.ui.toggleCodex === 'function') {
+      if (world.ui && typeof world.ui.toggleCodex === 'function') {
         world.ui.toggleCodex(false);
       } else {
         codexPanel.style.display = 'none';
@@ -118,7 +118,7 @@
         ) {
           ev.preventDefault();
           ev.stopPropagation();
-          if (window.world && world.ui && typeof world.ui.toggleCodex === 'function') {
+          if (world.ui && typeof world.ui.toggleCodex === 'function') {
             world.ui.toggleCodex(true);
           }
           return;
