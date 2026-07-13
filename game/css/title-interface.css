@@ -78,7 +78,7 @@
   max-width: min(610px, 48vw);
   max-height: calc(100dvh - max(36px, env(safe-area-inset-top)) - max(36px, env(safe-area-inset-bottom)));
   margin: auto 0 auto clamp(8px, 4.5vw, 74px);
-  padding: 24px 26px 22px;
+  padding: 20px 24px 18px;
   overflow-y: auto;
   overscroll-behavior: contain;
   text-align: left;
@@ -88,6 +88,13 @@
   box-shadow: 0 18px 58px rgba(0, 0, 0, .54);
   -webkit-overflow-scrolling: touch;
   animation: title-panel-reveal .58s cubic-bezier(.2, .8, .2, 1) both;
+  /* sin barra de scroll visible: el contenido está dimensionado para caber;
+     en pantallas extremas se puede seguir bajando con rueda/dedo */
+  scrollbar-width: none;
+}
+
+#screen-title.title-interface-enabled .title-box::-webkit-scrollbar {
+  display: none;
 }
 
 @supports (backdrop-filter: blur(4px)) {
@@ -97,40 +104,42 @@
   }
 }
 
+/* Tamaños compactos: TODO el menú debe caber en el cuadro SIN barra de
+   scroll en alturas de escritorio habituales (1080/900/768). */
 #screen-title.title-interface-enabled .title-box h1 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   text-align: left;
-  font-size: clamp(25px, 3.2vw, 42px);
+  font-size: clamp(22px, 2.4vw, 32px);
   line-height: 1.18;
-  letter-spacing: clamp(3px, .58vw, 8px);
+  letter-spacing: clamp(3px, .5vw, 7px);
   text-shadow: 0 3px 18px rgba(0, 0, 0, .74);
 }
 
 #screen-title.title-interface-enabled .subtitle {
-  margin: 0 0 15px;
+  margin: 0 0 10px;
   text-align: left;
-  font-size: clamp(15px, 1.5vw, 18px);
+  font-size: clamp(14px, 1.3vw, 16px);
   letter-spacing: 2px;
 }
 
 #screen-title.title-interface-enabled .intro-text {
-  max-width: 48ch;
-  margin: 0 0 16px;
+  max-width: 52ch;
+  margin: 0 0 8px;
   text-align: left;
-  font-size: clamp(16px, 1.55vw, 20px);
-  line-height: 1.42;
+  font-size: clamp(15px, 1.3vw, 17px);
+  line-height: 1.38;
 }
 
 #screen-title.title-interface-enabled #profile-box {
-  margin: 0 0 14px;
-  padding: 13px 14px 12px;
+  margin: 0 0 10px;
+  padding: 10px 12px 9px;
   background: rgba(10, 9, 6, .72);
   border: 1px solid rgba(138, 122, 61, .38);
   border-left: 3px solid rgba(217, 198, 110, .72);
 }
 
 #screen-title.title-interface-enabled .profile-title {
-  margin: 0 0 9px;
+  margin: 0 0 7px;
   text-align: left;
   letter-spacing: 2px;
 }
@@ -140,8 +149,8 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
-  margin: 0 0 8px;
+  gap: 7px;
+  margin: 0 0 7px;
 }
 
 #screen-title.title-interface-enabled .profile-row:last-child {
@@ -157,12 +166,12 @@
 #screen-title.title-interface-enabled #profile-name,
 #screen-title.title-interface-enabled #room-input {
   min-width: 0;
-  min-height: 42px;
-  padding: 8px 10px;
+  min-height: 36px;
+  padding: 6px 9px;
   color: var(--hueso);
   background-color: #0d0b07;
   border-color: rgba(217, 198, 110, .22);
-  font-size: 18px;
+  font-size: 16px;
 }
 
 #screen-title.title-interface-enabled #profile-select,
@@ -177,7 +186,7 @@
 }
 
 #screen-title.title-interface-enabled #profile-records {
-  margin: 8px 0 10px;
+  margin: 6px 0 8px;
   text-align: left;
   line-height: 1.25;
 }
@@ -189,7 +198,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  margin: 0 0 12px;
+  margin: 0 0 9px;
   text-align: left;
 }
 
@@ -212,17 +221,17 @@
 }
 
 #screen-title.title-interface-enabled .btn-small {
-  min-height: 40px;
+  min-height: 34px;
   margin-top: 0;
-  padding: 8px 12px;
+  padding: 6px 10px;
 }
 
 #screen-title.title-interface-enabled #btn-start {
   display: block;
   width: 100%;
-  min-height: 54px;
-  margin: 4px 0 0;
-  padding: 15px 17px;
+  min-height: 46px;
+  margin: 2px 0 0;
+  padding: 11px 15px;
   text-align: left;
   border-left-width: 4px;
   line-height: 1.35;
@@ -240,10 +249,10 @@
 }
 
 #screen-title.title-interface-enabled .hint {
-  margin-top: 16px;
+  margin-top: 10px;
   text-align: left;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.35;
   opacity: .8;
 }
 
