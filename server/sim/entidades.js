@@ -57,7 +57,7 @@ function ocupada(sala, x, y, self) {
     if (e.wp && e.wp[0] === x && e.wp[1] === y) return true;
   }
   for (const j of sala.jugadores.values())
-    if (!j.escondido && Fisica.tileDe(j.x) === x && Fisica.tileDe(j.y) === y) return true;
+    if (!j.escondido && !j.espectador && Fisica.tileDe(j.x) === x && Fisica.tileDe(j.y) === y) return true;
   return false;
 }
 
@@ -68,7 +68,7 @@ function dmapJugadores(sala) {
   const d = new Int32Array(g.w * g.h).fill(-1);
   const cola = [];
   for (const j of sala.jugadores.values()) {
-    if (j.escondido || j.muerto) continue;
+    if (j.escondido || j.muerto || j.espectador) continue;
     const i = Fisica.tileDe(j.y) * g.w + Fisica.tileDe(j.x);
     if (i >= 0 && i < d.length && d[i] !== 0) { d[i] = 0; cola.push(i); }
   }
@@ -139,7 +139,7 @@ function adyacente(e, j) {
 
 function jugadorAdyacente(sala, e) {
   for (const j of sala.jugadores.values())
-    if (!j.escondido && !j.muerto && adyacente(e, j)) return j;
+    if (!j.escondido && !j.muerto && !j.espectador && adyacente(e, j)) return j;
   return null;
 }
 
@@ -154,7 +154,7 @@ function detecta(sala, e) {
   const d = e.def.deteccion || {};
   let objetivo = null, mejorDist = Infinity;
   for (const j of sala.jugadores.values()) {
-    if (j.escondido || j.muerto) continue;
+    if (j.escondido || j.muerto || j.espectador) continue;
     // botas reforzadas (−1): te detectan más tarde. El radio de la ficha se
     // amplifica con OLFATO: cada entidad conserva su alcance RELATIVO (las
     // de radio corto siguen siendo miopes; las cazadoras huelen de lejos)
@@ -215,7 +215,7 @@ function golpe(sala, e, jug, ahora) {
 function resolverTelegraph(sala, e, ahora) {
   if (!e.preparando || ahora < e.prepHasta) return;
   const obj = sala.jugadores.get(e.prepObjetivo);
-  if (obj && !obj.escondido && !obj.muerto && adyacente(e, obj)) { golpe(sala, e, obj, ahora); return; }
+  if (obj && !obj.escondido && !obj.muerto && !obj.espectador && adyacente(e, obj)) { golpe(sala, e, obj, ahora); return; }
   const otro = jugadorAdyacente(sala, e);
   if (otro) { golpe(sala, e, otro, ahora); return; }
   e.preparando = false;

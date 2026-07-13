@@ -748,3 +748,23 @@ details.cdx > div, details.cdx > ol { padding: 6px 14px 12px; }
   pointer-events: none;
 }
 
+
+/* ---------- modo espectador (v30, solo guardián) ---------- */
+#espectador-bar {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(14, 12, 9, .88); border: 1px solid #7ab8e8; border-radius: 6px;
+  padding: 5px 14px; color: #cfe2f0;
+  font: 19px var(--font-body); letter-spacing: 1px; z-index: 40;
+}
+#espectador-bar .esp-ojo { font-size: 16px; }
+#espectador-bar b { color: #ffe9a0; }
+#espectador-bar button {
+  background: #0a0906; color: #cfe2f0; border: 1px solid #2a4a62; border-radius: 4px;
+  font: 16px var(--font-body); padding: 1px 10px; cursor: pointer;
+}
+#espectador-bar button:hover { border-color: #7ab8e8; }
+/* espectando, el HUD del cuerpo desaparece: solo queda el nivel y su gente */
+body.espectando #hud-manos, body.espectando #hud-equipo,
+body.espectando #moodles, body.espectando #debug-stats,
+body.espectando #touch-controls { display: none !important; }

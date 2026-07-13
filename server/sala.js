@@ -112,7 +112,8 @@ class Sala {
   }
 
   censo() {
-    return [...this.jugadores.values()].map((j) => ({
+    // los espectadores (v30) no existen para los demás clientes
+    return [...this.jugadores.values()].filter((j) => !j.espectador).map((j) => ({
       id: j.id, nombre: j.nombre, x: j.x, y: j.y, rot: j.rot,
       escondido: !!j.escondido,
     }));
@@ -138,6 +139,7 @@ class Sala {
       salud: 100, sed: 100, cordura: 100, luz: false, escondido: null, muerto: false,
       inv: [], manos: [null, null], equipo: { cara: null, cuerpo: null, pies: null },
       esAdmin: false, muteadoHasta: 0,
+      espectador: null, // v30: {objetivo: id} — guardián invisible observando
       ultMov: 0, ultChat: 0, canal: null, ofertaEn: null, manila: null,
       // observatorio: cuándo entró al mundo y cuántos informes de posición
       // ilegales acumula (vel = speedhack, muro = noclip) — señal de auditoría
@@ -197,6 +199,7 @@ class Sala {
   }
 
   herir(jug, cantidad, causa) {
+    if (jug.espectador) return; // un observador no puede ser tocado
     jug.salud = Math.max(0, jug.salud - cantidad);
     this.enviarEstado(jug);
     if (jug.salud <= 0) this.morir(jug, causa);
@@ -267,7 +270,9 @@ class Sala {
   // Un informe ilegal NO mueve nada: se responde con la última posición
   // válida ('mueve' + sec) y el cliente vuelve a ella.
   posicion(jug, m) {
-    if (jug.muerto || jug.escondido) return;
+    // espectador (v30): la cámara sigue al objetivo en el cliente — ningún
+    // informe cuenta (ni supervivencia, ni ofertas, ni validación)
+    if (jug.muerto || jug.escondido || jug.espectador) return;
     if ((m.sec | 0) < (jug.sec || 0)) return; // anterior a un teleport: obsoleto
     const ahora = Date.now();
     const dt = Math.min(1.5, (ahora - (jug._posT ?? ahora)) / 1000);
@@ -401,6 +406,7 @@ class Sala {
   // individual y vive en el cliente (Net.accion lo intercepta); al servidor
   // solo llega {t:'loot'} para dar de alta el objeto encontrado.
   accion(jug) {
+    if (jug.espectador) { this.avisoFantasma(jug); return; }
     if (jug.muerto || jug.canal) return;
     // 1) escondite: salir de él
     if (jug.escondido) { this.esconder(jug, false); return; }
@@ -423,7 +429,7 @@ class Sala {
   // El servidor solo garantiza lo importante: cadencia (nada de granjas de
   // objetos por mensaje) y hueco en la mochila. El objeto debe existir.
   loot(jug, id) {
-    if (jug.muerto) return;
+    if (jug.muerto || jug.espectador) return;
     const def = DATA.objects[id];
     if (!def) return;
     const ahora = Date.now();
@@ -499,6 +505,7 @@ class Sala {
 
   // ---------- cruzar salidas ----------
   cruzar(jug, si) {
+    if (jug.espectador) return; // el observador cruza siguiendo a su objetivo
     if (!si) { jug.ofertaEn = null; return; }
     const s = this.salidaCerca(jug, 1.0);
     if (!s || jug.muerto) return;
@@ -669,6 +676,7 @@ class Sala {
   }
 
   usar(jug, mano) {
+    if (jug.espectador) { this.avisoFantasma(jug); return; }
     if (jug.muerto || jug.escondido) return;
     const id = jug.manos[mano];
     const def = DATA.objects[id];
@@ -712,6 +720,7 @@ class Sala {
   // la linterna solo alumbra EN LA MANO (v23): el servidor manda, el cliente
   // refleja — luzDe llega también al dueño (nada de encender en local)
   luz(jug, si) {
+    if (jug.espectador && si) return; // un fantasma no enciende linternas
     const tieneLuzEnMano = (jug.manos || []).some((id) => DATA.objects[id]?.efecto?.toggle === 'luz');
     if (si && !tieneLuzEnMano) {
       this.enviar(jug.ws, { t: 'aviso', txt: 'Necesitas una fuente de luz en la mano (B: mochila, arrastrala a una mano).' });
@@ -724,6 +733,7 @@ class Sala {
 
   // ---------- mochila autoritativa (los gestos del panel llegan por red) ----------
   mochila(jug, m) {
+    if (jug.espectador) { this.avisoFantasma(jug); return; }
     if (jug.muerto) return;
     const OBJ = DATA.objects;
     const aviso = (txt) => this.enviar(jug.ws, { t: 'aviso', txt });
@@ -821,8 +831,46 @@ class Sala {
     this.ruido = { x, y, radio, hasta: Date.now() + 3200 };
   }
 
+  // ---------- modo espectador del guardián (v30) ----------
+  avisoFantasma(jug) {
+    this.enviar(jug.ws, { t: 'aviso', txt: 'Eres un observador: las Backrooms no te sienten.' });
+  }
+
+  // convierte al guardián en observador invisible del objetivo (misma sala).
+  // Para los demás clientes simplemente «se va» ('sale'); las entidades lo
+  // ignoran por los filtros de sim/entidades.js.
+  espectarA(jug, objetivo) {
+    if (!jug.espectador) this.difundir({ t: 'sale', id: jug.id }, jug.id);
+    if (jug.luz) this.luz(jug, false);
+    jug.espectador = { objetivo: objetivo.id };
+    jug.escondido = null; jug.canal = null; jug.manila = null; jug.ofertaEn = null;
+    jug.x = objetivo.x; jug.y = objetivo.y;
+    jug.sec = (jug.sec || 0) + 1; // teleport: caducan los informes en vuelo
+    this.enviar(jug.ws, { t: 'mueve', id: jug.id, x: r2(jug.x), y: r2(jug.y), sec: jug.sec });
+    this.enviar(jug.ws, { t: 'espectar', si: true, objetivo: { id: objetivo.id, nombre: objetivo.nombre } });
+  }
+
+  // el observador vuelve al mundo: reaparece junto a su objetivo (o donde
+  // estaba) y los demás lo ven entrar
+  dejarDeEspectar(jug, motivo) {
+    if (!jug.espectador) return;
+    const obj = this.jugadores.get(jug.espectador.objetivo);
+    jug.espectador = null;
+    const ancla = obj || jug;
+    const [x, y] = this.buscarSpawn(Fisica.tileDe(ancla.x), Fisica.tileDe(ancla.y));
+    jug.x = x; jug.y = y;
+    jug.sec = (jug.sec || 0) + 1;
+    jug._posT = Date.now();
+    jug._margen = 0.8;
+    this.enviar(jug.ws, { t: 'mueve', id: jug.id, x: r2(x), y: r2(y), sec: jug.sec });
+    this.difundir({ t: 'entra', id: jug.id, nombre: jug.nombre, x, y, rot: jug.rot }, jug.id);
+    this.enviar(jug.ws, { t: 'espectar', si: false });
+    if (motivo) this.enviar(jug.ws, { t: 'aviso', txt: motivo });
+  }
+
   // ---------- muerte: como el roguelike, despiertas otra vez en Level 0 ----------
   morir(jug, causa) {
+    if (jug.espectador) return; // los observadores no mueren
     jug.muerto = true;
     jug.escondido = null;
     jug.canal = null;
@@ -942,6 +990,7 @@ class Sala {
   }
 
   chat(jug, txt) {
+    if (jug.espectador) { this.avisoFantasma(jug); return; }
     const ahora = Date.now();
     if (ahora < (jug.muteadoHasta || 0)) {
       this.enviar(jug.ws, { t: 'aviso', txt: 'Estás silenciado. Las paredes no te escuchan.' });
@@ -1075,7 +1124,8 @@ function observa() {
       jugadores: 0, mensajes: 0, instancias: 0, privadas: 0,
     });
     const a = porNivel.get(k);
-    a.jugadores += s.jugadores.size;
+    // los espectadores no cuentan como jugadores del nivel (vista de negocio)
+    a.jugadores += [...s.jugadores.values()].filter((j) => !j.espectador).length;
     a.mensajes += s.mensajes;
     a.instancias++;
     if (s.privada) a.privadas++;
@@ -1096,6 +1146,7 @@ function observa() {
         salud: j.salud, sed: j.sed, cordura: j.cordura,
         luz: !!j.luz, escondido: !!j.escondido, muerto: !!j.muerto,
         esAdmin: !!j.esAdmin, muteado: j.muteadoHasta > ahora,
+        espectador: !!j.espectador,
         conectadoS: Math.round((ahora - (j.conectadoEn || ahora)) / 1000),
         distSala: Math.round(j.distSala || 0),
         inv: (j.inv || []).map(conNombre),

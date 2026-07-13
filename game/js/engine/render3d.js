@@ -16,6 +16,7 @@
   let camRot = 0;          // rotación de cámara en pasos de 90° (0-3), tecla Q (modo alta)
   let camYaw = 0;          // yaw animado (radianes)
   let yawLibre = null;     // v25 online: cámara LIBRE (ratón, estilo Roblox); null = aún sin tocar
+  let espAlt = 14;         // v30: altura de la cámara cenital de espectador (5-26)
   let ultimoOrbitoT = 0;   // v26: timestamp del último movimiento manual de cámara (órbita)
   // altura de muros: en 3ª persona son de altura real (la cámara va a 1.5 y JAMÁS
   // ve por encima → nunca se rompe la sensación de interior)
@@ -1169,6 +1170,13 @@
   // centrado inmediato de cámara al entrar en un nivel nuevo
   function centrarCamara(world) {
     const p = world.player;
+    if (world.espectador) {
+      // v30: espectando el cambio de nivel arranca ya en cenital, sin viaje
+      camYaw = 0; yawLibre = null;
+      camera.position.set(p.rx + 0.5, espAlt, p.ry + 0.5 + espAlt * 0.33);
+      frame._look = new THREE.Vector3(p.rx + 0.5, 0.4, p.ry + 0.5);
+      return;
+    }
     if (CAM_MODO === 'tercera') {
       if (world.online) {
         // online p.rot es θ continuo; la cámara arranca a la espalda y de
@@ -1404,11 +1412,12 @@
     playerSprite.material.map = spriteTexFlip(sid, pframe, sflip);
     playerSprite.material.needsUpdate = true;
     playerSprite.position.set(px, SPRITE_H / 2 + 0.02, pz);
-    playerSprite.visible = !world.escondido; // dentro de un mueble no se te ve
+    // dentro de un mueble no se te ve; el espectador (v30) es un fantasma
+    playerSprite.visible = !world.escondido && !world.espectador;
 
     // capa de la máscara de gas (PUESTA en la ranura de cara): PNG opcional
     const conMascara = world.equipado && world.equipado('mascara_gas') && Sprites.tiene(maskId);
-    playerMaskSprite.visible = conMascara && !world.escondido;
+    playerMaskSprite.visible = conMascara && !world.escondido && !world.espectador;
     if (conMascara) {
       const mframe = pframe % Sprites.frameCount(maskId);
       playerMaskSprite.material.map = spriteTexFlip(maskId, mframe, sflip);
@@ -1589,6 +1598,9 @@
         const sc = (50 - cordura) / 50;
         targetFogBase = fogBase * (1 + sc * 0.9); // hasta +90% de niebla (claustrofobia)
       }
+      // espectador (v30): desde 14 de altura la niebla normal funde el suelo
+      // a negro — casi fuera, que el guardián vea el plano entero
+      if (world.espectador) targetFogBase = Math.min(fogBase, 0.015);
       scene.fog.density += ((luzOn ? targetFogBase * 0.45 : targetFogBase) - scene.fog.density) * 0.06;
     }
 
@@ -1629,7 +1641,27 @@
     }
     actualizarLucesTecho(world, px, pz, fase0);
 
-    if (CAM_MODO === 'tercera') {
+    // ---------- modo espectador (v30): casa de muñecas ----------
+    // el techo y sus fluorescentes taparían TODO desde una cámara cenital:
+    // sus materiales se apagan mientras dure (se re-aplica cada frame porque
+    // aplicarEstatica los recrea al cambiar de nivel); luz ambiente de apoyo
+    {
+      const espectando = !!world.espectador;
+      if (transitionMats && transitionMats.ceiling) transitionMats.ceiling.visible = !espectando;
+      for (const m of panelMats) if (m) m.visible = !espectando;
+      if (espectando) amb.intensity = Math.max(amb.intensity, 0.55);
+    }
+
+    if (world.espectador) {
+      // --- CÁMARA CENITAL de espectador (v30): sobre el objetivo, con una
+      // inclinación leve para que los billboards sigan leyéndose; la rueda
+      // del ratón ajusta la altura (main.js escribe Render3D.espAlt) ---
+      const alt = espAlt;
+      camera.position.lerp(new THREE.Vector3(px, alt, pz + alt * 0.33), 0.1);
+      frame._look = frame._look || new THREE.Vector3(px, 0.4, pz);
+      frame._look.lerp(new THREE.Vector3(px, 0.4, pz), 0.14);
+      camera.lookAt(frame._look);
+    } else if (CAM_MODO === 'tercera') {
       // --- CÁMARA 3ª PERSONA: pegada a la espalda, baja, inmersiva ---
       const rot = p.rot ?? 2;
       if (world.moving) camBobT += 0.13;
@@ -1858,6 +1890,9 @@
       yawLibre = (yawLibre === null ? camYaw : yawLibre) + d;
       ultimoOrbitoT = performance.now();
     },
+    // v30 — altura de la cámara cenital de espectador (rueda del ratón)
+    get espAlt() { return espAlt; },
+    set espAlt(v) { espAlt = Math.max(5, Math.min(26, v)); },
     // v25 — pantalla completa real: relanza el render a la resolución nueva
     resize(w, h) {
       if (!renderer) return;

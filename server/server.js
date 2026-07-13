@@ -87,6 +87,32 @@ function buscarPorId(id) {
   return null;
 }
 
+// grafo de niveles para la Sala de Control: nodos + aristas desde las fichas
+// (estático: se calcula una vez). El sentinel *opciones:a,b conecta con VARIOS
+// destinos, como en pipeline/make-map.js→destinosDe.
+let _grafoCache = null;
+function grafoNiveles() {
+  if (_grafoCache) return _grafoCache;
+  const destinosDe = (s) => {
+    if (!s.destino) return [];
+    if (s.destino.startsWith('*opciones:'))
+      return s.destino.slice('*opciones:'.length).split(',').filter((id) => DATA.levels[id]);
+    return DATA.levels[s.destino] ? [s.destino] : [];
+  };
+  const niveles = {};
+  for (const [id, lv] of Object.entries(DATA.levels)) {
+    niveles[id] = {
+      id, wikiTitle: lv.wikiTitle, nombre: lv.nombre, clase: lv.clase,
+      peligro: lv.peligro, bioma: lv.bioma, esEscape: !!lv.esEscape,
+      salidas: (lv.salidas || []).map((s) => ({
+        destinos: destinosDe(s), tipo: s.tipo, texto: s.texto,
+      })),
+    };
+  }
+  _grafoCache = JSON.stringify({ niveles });
+  return _grafoCache;
+}
+
 const servidor = http.createServer((req, res) => {
   const rutaUrl = (req.url || '/').split('?')[0];
   if (rutaUrl === '/censo') {
@@ -141,8 +167,37 @@ const servidor = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: ok === 'freno' ? 'Demasiados intentos.' : 'La clave no abre nada.' }));
         return;
       }
+      const responder = (cod, cuerpo) => {
+        res.writeHead(cod, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify(cuerpo));
+      };
+      // acciones sin objetivo: anuncio global (retos del streamer) y salir de espectar
+      if (m.accion === 'anuncio') {
+        const txt = String(m.txt || '').trim().slice(0, 200);
+        if (!txt) { responder(400, { error: 'Anuncio vacío.' }); return; }
+        for (const s of salasVivas()) s.difundir({ t: 'anuncio', txt });
+        console.log(`[obs] anuncio: ${txt}`);
+        responder(200, { ok: true, msg: 'Anunciado a todas las Backrooms.' });
+        return;
+      }
+      if (m.accion === 'espectar' || m.accion === 'espectar-fin') {
+        // el cuerpo del guardián: su jugador conectado con la clave validada
+        // (si hay varios, el de conexión más reciente)
+        const guardianes = [];
+        for (const s of salasVivas())
+          for (const j of s.jugadores.values())
+            if (j.esAdmin) guardianes.push({ jug: j, sala: s });
+        guardianes.sort((a, b) => (b.jug.conectadoEn || 0) - (a.jug.conectadoEn || 0));
+        const g = guardianes[0];
+        if (!g) { responder(409, { error: 'Entra al juego y valida tu clave 🔑 en Ajustes primero.' }); return; }
+        const r2 = espectar(g.jug, g.sala, m.accion === 'espectar-fin' ? null : (m.id | 0));
+        if (r2.error) { responder(409, { error: r2.error }); return; }
+        console.log(`[obs] ${m.accion} por ${g.jug.nombre}#${g.jug.id}`);
+        responder(200, { ok: true, msg: r2.msg });
+        return;
+      }
       const r = buscarPorId(m.id | 0);
-      if (!r) { res.writeHead(404, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: 'Ese errante ya no está conectado.' })); return; }
+      if (!r) { responder(404, { error: 'Ese errante ya no está conectado.' }); return; }
       let msg;
       if (m.accion === 'kick') {
         r.jug.ws.close(1008, 'expulsado');
@@ -154,19 +209,31 @@ const servidor = http.createServer((req, res) => {
         msg = `${r.jug.nombre} baneado (no podrá volver a entrar con este navegador).`;
         console.log(`[obs] ban ${r.jug.nombre}#${r.jug.id}`);
       } else {
-        res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: 'Acción inválida.' })); return;
+        responder(400, { error: 'Acción inválida.' }); return;
       }
-      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      res.end(JSON.stringify({ ok: true, msg }));
+      responder(200, { ok: true, msg });
     });
     return;
   }
-  if (rutaUrl === '/observatorio') {
-    fs.readFile(path.join(__dirname, 'observatorio.html'), (err, datos) => {
+  if (rutaUrl === '/observatorio' || rutaUrl === '/observatorio/mapa') {
+    const archivo = rutaUrl === '/observatorio' ? 'observatorio.html' : 'observatorio-mapa.html';
+    fs.readFile(path.join(__dirname, archivo), (err, datos) => {
       if (err) { res.writeHead(404); res.end('no existe'); return; }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' });
       res.end(datos);
     });
+    return;
+  }
+  if (rutaUrl === '/grafo') {
+    // grafo estático de niveles para la Sala de Control (misma clave que /observa)
+    const ok = claveObserva(req);
+    if (ok !== 'ok') {
+      res.writeHead(ok === 'freno' ? 429 : 403, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: ok === 'freno' ? 'Demasiados intentos.' : 'La clave no abre nada.' }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(grafoNiveles());
     return;
   }
   const url = decodeURIComponent((req.url || '/').split('?')[0]);
@@ -248,6 +315,13 @@ wss.on('connection', (ws, req) => {
       return;
     }
     if (!jug) return; // todo lo demás exige estar dentro
+    if (m.t === 'espectar') {
+      // modo espectador (v30): solo el guardián
+      if (!jug.esAdmin) { sala.enviar(ws, { t: 'aviso', txt: 'Comando desconocido.' }); return; }
+      const r = espectar(jug, sala, m.objetivo);
+      if (r.error) sala.enviar(ws, { t: 'aviso', txt: r.error });
+      return;
+    }
     if (m.t === 'p') sala.posicion(jug, m);
     else if (m.t === 'loot') sala.loot(jug, m.id);
     else if (m.t === 'accion') sala.accion(jug);
@@ -274,6 +348,10 @@ wss.on('connection', (ws, req) => {
     if (porIp.get(ip) <= 0) porIp.delete(ip);
     if (jug && sala) {
       sala.salir(jug);
+      // si alguien lo estaba espectando, su objetivo se ha desvanecido
+      for (const esp of [...sala.jugadores.values()])
+        if (esp.espectador && esp.espectador.objetivo === jug.id)
+          sala.dejarDeEspectar(esp, `${jug.nombre} se ha desvanecido de las Backrooms.`);
       console.log(`[-] ${jug.nombre}#${jug.id} ← ${sala.clave} (${sala.jugadores.size})`);
     }
   });
@@ -309,6 +387,10 @@ function cambiarDeSala(jug, salaVieja, defSalida, opts) {
   const conRetorno = !(opts && opts.sinRetorno) && !(opts && opts.sinTarjeta) &&
     !esSinRetorno(defSalida) && origen !== nueva.nivelId;
   jug.retorno = null;
+  // cruzar por aquí SIEMPRE devuelve al mundo (un espectador viaja por
+  // moverEspectador): si un guardián espectando usa /tp, el flag no puede
+  // sobrevivir en el servidor con el cliente ya fuera del modo
+  jug.espectador = null;
   let x, y;
   const iVuelta = conRetorno
     ? nueva.map.exits.findIndex((e) => e.def.destino === origen) : -1;
@@ -350,6 +432,66 @@ function cambiarDeSala(jug, salaVieja, defSalida, opts) {
   db.registrarVisita(jug.token, nueva.nivelId);
   if (nueva.def.esEscape) db.sumarEscape(jug.token);
   console.log(`[→] ${jug.nombre}#${id} cruza a ${nueva.clave}`);
+  // v30: tus espectadores cruzan CONTIGO (invisibles) — cubre puertas,
+  // caminata, Sala Manila, /tp y el respawn tras la muerte
+  for (const esp of [...salaVieja.jugadores.values()])
+    if (esp.espectador && esp.espectador.objetivo === id)
+      moverEspectador(esp, salaVieja, nueva, jug);
+}
+
+// ---------- modo espectador del guardián (v30) ----------
+// Mueve a un espectador a la MISMA instancia que su objetivo (sin pasar por
+// asignar(): con la sala llena acabaría en otra instancia y perdería la
+// acción). Réplica del tramo final de cambiarDeSala sin retorno ni caminata.
+function moverEspectador(esp, salaVieja, nueva, objetivo) {
+  salaVieja.salir(esp); // el 'sale' que difunde es inofensivo: nadie lo tenía
+  esp.retorno = null;
+  esp.canal = null; esp.escondido = null; esp.manila = null; esp.ofertaEn = null;
+  esp.caminataObjetivo = 0;
+  esp.x = objetivo.x; esp.y = objetivo.y;
+  esp.sec = (esp.sec || 0) + 1;
+  esp._posT = Date.now();
+  esp._margen = 0.8;
+  nueva.jugadores.set(esp.id, esp);
+  nueva.enviar(esp.ws, {
+    t: 'nivel', nivel: nueva.nivelId, inst: nueva.inst, semilla: nueva.semilla, privada: nueva.privada,
+    x: esp.x, y: esp.y, rot: esp.rot, sec: esp.sec,
+    via: `Sigues a ${objetivo.nombre} a través de la realidad.`,
+    sinTarjeta: true,
+    salud: esp.salud, sed: esp.sed, cordura: esp.cordura, inv: esp.inv, manos: esp.manos, equipo: esp.equipo,
+    retorno: null, caminata: null,
+    jugadores: nueva.censo(), ...nueva.estadoDinamico(),
+    espectador: { id: objetivo.id, nombre: objetivo.nombre },
+  });
+  if (esp._reSala) esp._reSala(nueva);
+  console.log(`[👁] ${esp.nombre}#${esp.id} sigue a ${objetivo.nombre}#${objetivo.id} → ${nueva.clave}`);
+}
+
+// entra/sale/cambia de objetivo del modo espectador. La comparten el mensaje
+// ws {t:'espectar'} y el botón 👁 del observatorio (/accion). Devuelve
+// {ok, msg} o {error}.
+function espectar(jug, sala, objetivoId) {
+  if (objetivoId === null || objetivoId === undefined) {
+    if (!jug.espectador) return { error: 'No estabas observando a nadie.' };
+    sala.dejarDeEspectar(jug, 'Vuelves a pisar la moqueta.');
+    return { ok: true, msg: `${jug.nombre} vuelve al mundo.` };
+  }
+  if (jug.muerto) return { error: 'El guardián está muriendo: espera a despertar en Level 0.' };
+  const r = buscarPorId(objetivoId | 0);
+  if (!r) return { error: 'Ese errante ya no está conectado.' };
+  if (r.jug.id === jug.id) return { error: 'No puedes observarte a ti mismo.' };
+  if (r.jug.espectador) return { error: 'Ese errante también es un observador.' };
+  if (r.jug.muerto) return { error: 'Ese errante está muriendo: espera a que despierte.' };
+  if (r.sala === sala) {
+    sala.espectarA(jug, r.jug);
+  } else {
+    // objetivo en otra sala: desaparecer de la actual y viajar con él
+    if (!jug.espectador) sala.difundir({ t: 'sale', id: jug.id }, jug.id);
+    if (jug.luz) sala.luz(jug, false);
+    jug.espectador = { objetivo: r.jug.id };
+    moverEspectador(jug, sala, r.sala, r.jug);
+  }
+  return { ok: true, msg: `Observando a ${r.jug.nombre} en ${r.sala.def.nombre || r.sala.nivelId}.` };
 }
 
 // ---------- comandos de chat (moderación del streamer) ----------

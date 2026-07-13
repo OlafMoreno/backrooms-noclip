@@ -339,6 +339,30 @@ roja fija junto a la puerta, para que se distinga de cualquier otra puerta del j
 **retiró por completo LA SINTONÍA** (el RPG de Instintos de v18) del modo solo a petición
 del usuario — ver la nota en la entrada v18 de más arriba.
 
+**v30 — Sala de Control y modo espectador (protocolo v8)**: para los directos del streamer.
+`/observatorio/mapa` (`server/observatorio-mapa.html`, botón 🗺 en /observatorio) = mapa VIVO
+del grafo de niveles: mismo layout BFS por capas y estética que `mapa-piloto.html` (el
+algoritmo está COPIADO en la página; los datos los da `/grafo`, cache en server.js con el
+sentinel `*opciones:` resuelto), badges con jugadores por nivel vía `/observa` cada 2 s,
+clic en nivel → panel con jugadores y botones 👁 Espectar/kick/ban, ticker de eventos por
+DIFF entre polls (entra/cruza/muere/⭐escapa por delta de `historico.escapes`) y 📢 anuncio
+(`/accion {accion:'anuncio'}`). MODO ESPECTADOR: `jug.espectador={objetivo}` en sala.js —
+invisible (censo() lo excluye, 'sale' al entrar, 'entra' al salir), intocable (guards en
+herir/morir/accion/loot/usar/mochila/chat/cruzar/luz + filtros `!j.espectador` en los 5
+puntos de sim/entidades.js), `posicion()` lo ignora (el cliente NO reporta). El cruce del
+objetivo arrastra a sus espectadores: bucle al final de `cambiarDeSala` → `moverEspectador`
+(server.js) que NO pasa por `asignar()` — va a la MISMA instancia (con asignar, sala llena
+= instancia distinta y pierdes la acción). `espectar()` en server.js lo comparten el ws
+`{t:'espectar', objetivo|null}` (solo esAdmin) y `/accion espectar` (busca al guardián
+conectado más reciente; espectar-fin lo saca). Cliente: `w.espectador` — `Net.frame` pega
+`player.x/y` a la posición interpolada del objetivo en Otros (FOV radio ≥14 y AMBOS renders
+siguen la acción gratis), cámara CENITAL en render3d (rueda = altura vía `Render3D.espAlt`
+5-26, techo+paneles con `material.visible=false` cada frame = casa de muñecas, niebla
+~fuera, sprite propio oculto también en render.js 2D), barra `#espectador-bar`
+(body.espectando oculta el HUD por CSS), ←/→ cambian objetivo, ESC sale. Al desconectar el
+objetivo, `dejarDeEspectar` con aviso. Test: `server/test-espectador.js` (22 asserts, ws
+real). OJO: subir protocolo obliga a `v:` en cliente.js, bots.js y TODOS los test-*.js.
+
 (Todos existen y están committeados. v3: render cenital con paredes finas autotile en `tiles.js`/`render.js`,
 pixel-art data-driven en `sprites.js` con override PNG desde `game/assets/sprites/`, efectos de combate
 en `effects.js`, props/contenedores registrables en `mapgen.js`/`game.js`.)

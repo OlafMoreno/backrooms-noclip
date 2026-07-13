@@ -1,7 +1,7 @@
 // Arranque: input, bucle de animación y pantalla de título.
 (function () {
   // versión visible del juego (Ajustes); súbela con cada tanda de cambios
-  window.VERSION_JUEGO = 'v28.10';
+  window.VERSION_JUEGO = 'v30';
   const world = Game.world;
   world.data = window.GAME_DATA;
 
@@ -634,6 +634,45 @@
       };
     }
   }
+  // ---------- modo espectador (v30): barra, HUD fuera y cámara cenital ----------
+  // Se entra desde la Sala de Control (/observatorio/mapa, botón 👁) o
+  // programáticamente con Net.espectar(id); ←/→ cambian de objetivo, ESC sale.
+  function cambiarObjetivoEsp(dir) {
+    if (!world.espectador || !window.Net || !Net.activo) return;
+    const lista = (world.otros || []).slice().sort((a, b) => a.id - b.id);
+    if (!lista.length) return;
+    const i = lista.findIndex((o) => o.id === world.espectador.objetivo);
+    const sig = lista[((i < 0 ? 0 : i) + dir + lista.length) % lista.length];
+    if (sig && sig.id !== world.espectador.objetivo) Net.espectar(sig.id);
+  }
+  window.onEspectarCambia = (si, info) => {
+    document.body.classList.toggle('espectando', !!si);
+    const bar = document.getElementById('espectador-bar');
+    if (bar) bar.style.display = si ? 'flex' : 'none';
+    const nom = document.getElementById('esp-nombre');
+    if (nom) nom.textContent = si && info ? info.nombre : '';
+    if (si) {
+      // la vista pasa a ser del nivel, no del guardián: fuera paneles y movimiento
+      if (Minimap.visible) Minimap.toggleBig(false);
+      world.ui.toggleBackpack(false);
+      cerrarSndMenu();
+      if (document.pointerLockElement) document.exitPointerLock();
+      world.log(`Observas a ${info ? info.nombre : '???'} desde fuera de la realidad.`, 'event');
+    }
+    // (al salir, el aviso «Vuelves a pisar la moqueta» ya lo manda el servidor)
+  };
+  {
+    const b = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+    b('esp-prev', () => cambiarObjetivoEsp(-1));
+    b('esp-next', () => cambiarObjetivoEsp(1));
+    b('esp-salir', () => { if (window.Net && Net.activo) Net.espectar(null); });
+    // rueda del ratón: altura de la cámara cenital
+    document.addEventListener('wheel', (ev) => {
+      if (world.espectador && use3D && window.Render3D)
+        Render3D.espAlt += Math.sign(ev.deltaY) * 1.5;
+    }, { passive: true });
+  }
+
   // mochila (v15): botón del HUD y cierre del panel
   const btnMochila = document.getElementById('btn-mochila');
   if (btnMochila) {
@@ -820,6 +859,15 @@
     // ---------- modo online (BACKROOMS MMO v22): movimiento LIBRE ----------
     // las teclas de movimiento solo se apuntan; el vector se calcula por frame
     if (world.online) {
+      // ---------- modo espectador (v30): solo mirar, cambiar de ojo y salir ----------
+      if (world.espectador) {
+        if (ev.code === 'ArrowLeft' || ev.code === 'KeyA') { ev.preventDefault(); cambiarObjetivoEsp(-1); }
+        else if (ev.code === 'ArrowRight' || ev.code === 'KeyD') { ev.preventDefault(); cambiarObjetivoEsp(1); }
+        else if (ev.code === 'Escape') { if (!ev.repeat && window.Net) Net.espectar(null); }
+        else if (ev.code === 'KeyL') world.ui.toggleLog();
+        else if (ev.code === 'KeyM' || ev.code === 'KeyN') Minimap.toggleBig();
+        return;
+      }
       if (KEYS[ev.code]) {
         ev.preventDefault();
         teclas.add(ev.code);
@@ -1249,7 +1297,10 @@
     p.inputY = 0;
 
     // ---------- v22: vector de movimiento por frame (movimiento libre) ----------
-    if (world.online && window.Net && Net.activo &&
+    if (world.online && world.espectador && window.Net && Net.activo) {
+      // modo espectador (v30): sin input — Net.frame pega la cámara al objetivo
+      Net.frame(dtNet);
+    } else if (world.online && window.Net && Net.activo &&
         !(Net.chatAbierto && Net.chatAbierto()) &&
         document.getElementById('screen-card').style.display === 'none') {
       // suma de las teclas pulsadas en coordenadas de PANTALLA
