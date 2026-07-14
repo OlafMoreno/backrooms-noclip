@@ -4,6 +4,10 @@
 // tanda de cambios (junto con VERSION_JUEGO en main.js).
 (function () {
   const CHANGELOG = [
+    { v: 'v30.11', cambios: [
+      'El smog de Level 11 ahora pasa factura: respirarlo mucho tiempo sin protección desgasta la salud poco a poco. La máscara de gas, el traje AVMH y la protección química lo bloquean. (josealmon)',
+      'La salida de Level 6 hacia Level 7 ya no es una puerta: como dice la wiki, se cruza vagando lo suficiente por la oscuridad. (josealmon)',
+    ] },
     { v: 'v30.10', cambios: [
       'Arreglado el tirón al caminar: al mover o soltar el ratón la cámara daba un latigazo (parecía retroceder en el tiempo). Ahora la cámara va clavada a tu personaje, toques el ratón o no.',
       'La portada pierde los botones Exportar/Importar del expediente.',
